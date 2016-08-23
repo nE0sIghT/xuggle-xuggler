@@ -29,7 +29,7 @@
  * NOTE: See http://id3.org/ for more information about ID3 tag formats.
  */
 
-/* $Id: id3tag.c,v 1.75.2.2 2012/01/08 23:49:58 robert Exp $ */
+/* $Id$ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

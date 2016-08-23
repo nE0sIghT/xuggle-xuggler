@@ -22,7 +22,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/* $Id: mp3rtp.c,v 1.36 2011/10/02 17:13:22 robert Exp $ */
+/* $Id$ */
 
 /* Still under work ..., need a client for test, where can I get one? */
 

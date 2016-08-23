@@ -1,4 +1,4 @@
-## $Id: Makefile.am,v 1.26 2011/04/04 09:42:34 aleidinger Exp $
+## $Id$
 
 AUTOMAKE_OPTIONS = foreign $(top_srcdir)/ansi2knr
 

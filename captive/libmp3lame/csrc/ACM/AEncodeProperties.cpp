@@ -22,7 +22,7 @@
  
 /*!
 	\author Steve Lhomme
-	\version \$Id: AEncodeProperties.cpp,v 1.9 2006/12/25 21:37:34 robert Exp $
+	\version \$Id$
 */
 
 #if !defined(STRICT)

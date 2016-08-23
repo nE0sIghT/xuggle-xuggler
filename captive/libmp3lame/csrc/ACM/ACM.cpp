@@ -22,7 +22,7 @@
  
 /*!
 	\author Steve Lhomme
-	\version \$Id: ACM.cpp,v 1.20 2007/05/17 22:25:40 robert Exp $
+	\version \$Id$
 */
 
 #if !defined(STRICT)

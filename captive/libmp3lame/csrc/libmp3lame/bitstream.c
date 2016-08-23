@@ -19,7 +19,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  *
- * $Id: bitstream.c,v 1.97 2011/05/07 16:05:17 rbrito Exp $
+ * $Id$
  */
 
 

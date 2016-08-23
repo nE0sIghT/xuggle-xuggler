@@ -1,4 +1,4 @@
-## $Id: Makefile.am,v 1.7 2010/09/30 20:58:40 jaz001 Exp $
+## $Id$
 
 AUTOMAKE_OPTIONS = foreign ansi2knr
 

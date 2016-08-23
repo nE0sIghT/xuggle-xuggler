@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/* $Id: lametime.c,v 1.21 2011/05/07 16:05:17 rbrito Exp $ */
+/* $Id$ */
 
 /*
  * name:        GetCPUTime ( void )
