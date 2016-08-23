@@ -4,7 +4,7 @@
  * Copyright (C) 2005-2012 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
- *          Jason Garrett-Glaser <darkshikari@gmail.com>
+ *          Fiona Glaser <fiona@x264.com>
  *          Christian Heine <sennindemokrit@gmx.net>
  *          Henrik Gramner <hengar-6@student.ltu.se>
  *
