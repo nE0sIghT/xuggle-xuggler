@@ -86,22 +86,15 @@ host_triplet = @host@
 @VS_OS_WINDOWS_TRUE@	-Wl,-Bsymbolic \
 @VS_OS_WINDOWS_TRUE@	-Wl,--warn-common \
 @VS_OS_WINDOWS_TRUE@	-Wl,--as-needed \
-@VS_OS_WINDOWS_TRUE@	-XCClinker -lgcc \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmingwex \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmingw32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmoldname \
+@VS_OS_WINDOWS_TRUE@	-XCClinker -lpthread \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmsvcrt \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -ladvapi32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lshell32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -luser32 \
-@VS_OS_WINDOWS_TRUE@	-XCClinker -lkernel32 \
-@VS_OS_WINDOWS_TRUE@	-XCClinker -lpthread
-
-@VS_OS_LINUX_TRUE@@VS_OS_WINDOWS_FALSE@am__append_2 = \
-@VS_OS_LINUX_TRUE@@VS_OS_WINDOWS_FALSE@	-nostdlib -static-libtool-libs -XCClinker -static-libgcc
-
-@VS_OS_LINUX_FALSE@@VS_OS_WINDOWS_FALSE@am__append_3 = \
-@VS_OS_LINUX_FALSE@@VS_OS_WINDOWS_FALSE@	-nostdlib -static-libtool-libs -XCClinker -static-libgcc
+@VS_OS_WINDOWS_TRUE@	-XCClinker -lkernel32
 
 subdir = csrc/com/xuggle
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
@@ -426,10 +419,11 @@ libxuggle_la_LIBADD = $(builddir)/xuggler/libxuggle-xuggler.la \
 	$(builddir)/xuggler/io/libxuggle-xuggler-io.la \
 	$(builddir)/ferry/libxuggle-ferry.la
 
-libxuggle_la_LDFLAGS = -no-undefined -shared -version-number \
-	@LIB_MAJOR_VERSION@:@LIB_MINOR_VERSION@:0 $(VS_LDFLAGS) \
-	$(VS_PKG_LIBRARIES) $(am__append_1) $(am__append_2) \
-	$(am__append_3)
+libxuggle_la_LDFLAGS = -no-undefined -shared -static-libtool-libs \
+	-nostdlib -version-number \
+	@LIB_MAJOR_VERSION@:@LIB_MINOR_VERSION@:0 -XCClinker -static \
+	-XCClinker -static-libgcc -XCClinker -static-libstdc++ \
+	-Wl,-Bstatic $(VS_PKG_LIBRARIES) $(VS_LDFLAGS) $(am__append_1)
 all: all-recursive
 
 .SUFFIXES:

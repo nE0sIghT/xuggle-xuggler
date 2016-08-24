@@ -75,6 +75,9 @@ case $HOST in
   *mingw*)
     case $HOST in
       *x86_64*)
+        export CC="x86_64-w64-mingw32-gcc -static-libgcc -static-libstdc++"
+        export CXX="x86_64-w64-mingw32-g++ -static-libgcc -static-libstdc++"
+
         ant -Dbuild.configure.os=${VS_WIN64} stage-native && \
         ant -Dbuild.configure.os=${VS_WIN64} stage-java && \
         true

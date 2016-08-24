@@ -28,9 +28,14 @@ libxuggle_la_LIBADD = $(builddir)/xuggler/libxuggle-xuggler.la \
 
 libxuggle_la_LDFLAGS = \
 	-no-undefined -shared \
+	-static-libtool-libs -nostdlib \
 	-version-number @LIB_MAJOR_VERSION@:@LIB_MINOR_VERSION@:0 \
-	$(VS_LDFLAGS) \
-	$(VS_PKG_LIBRARIES)
+	-XCClinker -static \
+	-XCClinker -static-libgcc \
+	-XCClinker -static-libstdc++ \
+	-Wl,-Bstatic \
+	$(VS_PKG_LIBRARIES) \
+	$(VS_LDFLAGS)
 
 if VS_OS_WINDOWS
 libxuggle_la_LDFLAGS+= \
@@ -40,21 +45,13 @@ libxuggle_la_LDFLAGS+= \
 	-Wl,-Bsymbolic \
 	-Wl,--warn-common \
 	-Wl,--as-needed \
-	-XCClinker -lgcc \
+	-XCClinker -lmingwex \
 	-XCClinker -lmingw32 \
 	-XCClinker -lmoldname \
-	-XCClinker -lmingwex \
+	-XCClinker -lpthread \
 	-XCClinker -lmsvcrt \
 	-XCClinker -ladvapi32 \
 	-XCClinker -lshell32 \
 	-XCClinker -luser32 \
 	-XCClinker -lkernel32
-else
-if VS_OS_LINUX
-libxuggle_la_LDFLAGS+= \
-	-nostdlib -static-libtool-libs -XCClinker -static-libgcc
-else
-libxuggle_la_LDFLAGS+= \
-	-nostdlib -static-libtool-libs -XCClinker -static-libgcc
-endif
 endif
