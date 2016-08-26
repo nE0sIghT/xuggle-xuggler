@@ -179,6 +179,10 @@ AC_CONFIG_FILES([Makefile
                  openssl/incarcerate
                  openssl/install.sh
                  openssl/uninstall.sh
+                 openssl-static/Makefile
+                 openssl-static/incarcerate
+                 openssl-static/install.sh
+                 openssl-static/uninstall.sh
                  libvpx/Makefile
                  libvpx/incarcerate
                  libvpx/install.sh
