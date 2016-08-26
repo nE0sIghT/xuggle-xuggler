@@ -13,6 +13,7 @@ AC_PREFIX_DEFAULT([${XUGGLE_HOME:-/usr/local}])
 AM_INIT_AUTOMAKE([-Wall -Werror no-dependencies nostdinc tar-pax 1.11.1 ])
 AM_MAINTAINER_MODE
 AM_SILENT_RULES([yes])
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 LT_INIT([disable-static disable-fast-install win32-dll])
 
 AC_CANONICAL_BUILD
