@@ -1,29 +1,30 @@
 ACLOCAL_AMFLAGS=-I m4
 
 bin_PROGRAMS = rtmpdump rtmpgw rtmpsrv rtmpsuck
+LIBS = $(OPENSSL_LIBS) $(EXTRA_LIBS)
 
 rtmpdump_SOURCES = \
   src/rtmpdump.c
 
-rtmpdump_LDADD = librtmp.la $(OPENSSL_LIBS)
+rtmpdump_LDADD = librtmp.la $(LIBS)
 
 rtmpgw_SOURCES = \
  src/rtmpgw.c \
  src/thread.c
 
-rtmpgw_LDADD = librtmp.la $(OPENSSL_LIBS)
+rtmpgw_LDADD = librtmp.la $(LIBS)
 
 rtmpsrv_SOURCES =  \
   src/rtmpsrv.c \
   src/thread.c
 
-rtmpsrv_LDADD = librtmp.la $(OPENSSL_LIBS)
+rtmpsrv_LDADD = librtmp.la $(LIBS)
 
 rtmpsuck_SOURCES = \
   src/rtmpsuck.c \
   src/thread.c
 
-rtmpsuck_LDADD = librtmp.la $(OPENSSL_LIBS)
+rtmpsuck_LDADD = librtmp.la $(LIBS)
 
 noinst_HEADERS = src/thread.h
 
@@ -35,7 +36,7 @@ AM_CFLAGS+=-DUSE_OPENSSL
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = librtmp.pc
 
-librtmp_la_LIBADD= $(OPENSSL_LIBS)
+librtmp_la_LIBADD= $(LIBS)
 librtmp_la_LDFLAGS=-version-number @LIB_MAJOR_VERSION@:@LIB_MINOR_VERSION@
 
 librtmp_la_SOURCES= \

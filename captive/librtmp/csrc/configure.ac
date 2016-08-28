@@ -34,11 +34,54 @@ AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
 
+HOST_OS=$host
+case $host in
+  *mingw*|*cygwin*)
+  HOST_TYPE=Windows
+  ;;
+  *darwin*)
+  HOST_TYPE=Mac
+  ;;
+  *linux*)
+  HOST_TYPE=Linux
+  VS_LDFLAGS+="-Wl,-Bsymbolic"
+  ;;
+  *)
+  HOST_TYPE=Linux
+  ;;
+esac
+enable_warningerrors=yes
+case $HOST_TYPE in
+  Windows)
+  HOST_SO_LIBPATH=[PATH]
+  VS_OS_WINDOWS=1
+  AC_SUBST([VS_OS_WINDOWS])
+  EXTRA_LIBS="-lws2_32 -lwinmm -lgdi32"
+  AC_SUBST([EXTRA_LIBS])
+  dnl For libtool
+  export need_lib_prefix=no
+  dnl Turns out older versions of G++ on windows have warnings
+  dnl in their std:: header files.  shame on them.
+  enable_warningerrors=no
+  ;;
+  Mac)
+  HOST_SO_LIBPATH=[DYLD_LIBRARY_PATH]
+  ;;
+  Linux)
+  HOST_SO_LIBPATH=[LD_LIBRARY_PATH]
+  ;;
+esac
+AM_CONDITIONAL([VS_OS_WINDOWS], [ test "${HOST_TYPE}" = "Windows" ])
+AM_CONDITIONAL([VS_OS_LINUX], [ test "${HOST_TYPE}" = "Linux" ])
+AM_CONDITIONAL([VS_OS_MAC], [ test "${HOST_TYPE}" = "Mac" ])
+
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+
 LT_PREREQ([2.2.7b])
 LT_INIT([disable-fast-install win32-dll])
 
 # Checks for libraries.
-PKG_CHECK_MODULES([OPENSSL], [openssl >= 1 ])
+PKG_CHECK_MODULES([OPENSSL], [openssl >= 1 zlib ])
 AC_CHECK_HEADERS([windows.h])
 AC_CHECK_HEADERS([mmsystem.h], [], [], [
 #ifdef HAVE_WINDOWS_H
@@ -91,8 +134,11 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([gethostbyname inet_ntoa memchr memset select socket strcasecmp strchr strdup strerror strncasecmp strrchr strstr strtol])
 
-PRIVATE_LIBS="${LIBS}"
+PRIVATE_LIBS=""
 AC_SUBST([PRIVATE_LIBS])
+
+PUBLIC_LIBS="${EXTRA_LIBS}"
+AC_SUBST([PUBLIC_LIBS])
 
 AC_CONFIG_FILES([Makefile
 librtmp.pc:src/librtmp/librtmp.pc.in])
