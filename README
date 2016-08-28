@@ -1,5 +1,5 @@
-DEPRECATED.
-
+This repository contains fixes to cross-compile Xuggler with newer mingw64.
+Please note that Xuggler was deprecated by upstream.
 Consider using Humble Video instead: https://github.com/artclarke/humble-video
 
 Welcome to Xuggle-Xuggler-Main (a.k.a. Xuggler)
