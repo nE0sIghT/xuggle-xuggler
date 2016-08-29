@@ -1,0 +1,35 @@
+Только в ./FFmpeg/: .git
+diff -ur ./FFmpeg/libavdevice/dshow_filter.c xuggle-xuggler/captive/ffmpeg/csrc/libavdevice/dshow_filter.c
+--- ./FFmpeg/libavdevice/dshow_filter.c	2016-08-29 11:00:59.517755718 +0300
++++ xuggle-xuggler/captive/ffmpeg/csrc/libavdevice/dshow_filter.c	2016-08-29 11:15:44.740692735 +0300
+@@ -19,6 +19,7 @@
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
++#define NO_DSHOW_STRSAFE
+ #include "dshow.h"
+ 
+ DECLARE_QUERYINTERFACE(libAVFilter,
+diff -ur ./FFmpeg/libavdevice/dshow_pin.c xuggle-xuggler/captive/ffmpeg/csrc/libavdevice/dshow_pin.c
+--- ./FFmpeg/libavdevice/dshow_pin.c	2016-08-29 11:00:59.517755718 +0300
++++ xuggle-xuggler/captive/ffmpeg/csrc/libavdevice/dshow_pin.c	2016-08-29 11:16:03.018691435 +0300
+@@ -19,6 +19,7 @@
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
++#define NO_DSHOW_STRSAFE
+ #include "dshow.h"
+ 
+ #include <stddef.h>
+diff -ur ./FFmpeg/libavformat/nutdec.c xuggle-xuggler/captive/ffmpeg/csrc/libavformat/nutdec.c
+--- ./FFmpeg/libavformat/nutdec.c	2016-08-29 11:00:59.565755715 +0300
++++ xuggle-xuggler/captive/ffmpeg/csrc/libavformat/nutdec.c	2016-08-29 11:30:59.961627618 +0300
+@@ -841,7 +841,7 @@
+     if     (stream_index == -1) return pts;
+     else if(stream_index == -2) return back_ptr;
+ 
+-assert(0);
++    return AV_NOPTS_VALUE;
+ }
+ 
+ static int read_seek(AVFormatContext *s, int stream_index, int64_t pts, int flags){

@@ -841,7 +841,7 @@ av_log(s, AV_LOG_DEBUG, "read_timestamp(X,%d,%"PRId64",%"PRId64")\n", stream_ind
     if     (stream_index == -1) return pts;
     else if(stream_index == -2) return back_ptr;
 
-assert(0);
+    return AV_NOPTS_VALUE;
 }
 
 static int read_seek(AVFormatContext *s, int stream_index, int64_t pts, int flags){
