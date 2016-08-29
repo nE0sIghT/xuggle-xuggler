@@ -82,7 +82,8 @@ static int sol_channels(int magic, int type)
     return 2;
 }
 
-static int sol_read_header(AVFormatContext *s)
+static int sol_read_header(AVFormatContext *s,
+                          AVFormatParameters *ap)
 {
     unsigned int magic,tag;
     AVIOContext *pb = s->pb;
@@ -147,5 +148,5 @@ AVInputFormat ff_sol_demuxer = {
     .read_probe     = sol_probe,
     .read_header    = sol_read_header,
     .read_packet    = sol_read_packet,
-    .read_seek      = ff_pcm_read_seek,
+    .read_seek      = pcm_read_seek,
 };

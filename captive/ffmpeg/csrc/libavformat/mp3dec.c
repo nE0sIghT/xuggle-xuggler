@@ -66,8 +66,6 @@ static int mp3_read_probe(AVProbeData *p)
     if   (first_frames>=4) return AVPROBE_SCORE_MAX/2+1;
     else if(max_frames>200)return AVPROBE_SCORE_MAX/2;
     else if(max_frames>=4) return AVPROBE_SCORE_MAX/4;
-    else if(ff_id3v2_match(buf0, ID3v2_DEFAULT_MAGIC) && 2*ff_id3v2_tag_len(buf0) >= p->buf_size)
-                           return AVPROBE_SCORE_MAX/8;
     else if(max_frames>=1) return 1;
     else                   return 0;
 //mpegps_mp3_unrecognized_format.mpg has max_frames=3
@@ -134,7 +132,8 @@ static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
     return 0;
 }
 
-static int mp3_read_header(AVFormatContext *s)
+static int mp3_read_header(AVFormatContext *s,
+                           AVFormatParameters *ap)
 {
     AVStream *st;
     int64_t off;
@@ -151,7 +150,6 @@ static int mp3_read_header(AVFormatContext *s)
     // lcm of all mp3 sample rates
     avpriv_set_pts_info(st, 64, 1, 14112000);
 
-    s->pb->maxsize = -1;
     off = avio_tell(s->pb);
 
     if (!av_dict_get(s->metadata, "", NULL, AV_DICT_IGNORE_SUFFIX))
@@ -198,6 +196,6 @@ AVInputFormat ff_mp3_demuxer = {
     .read_probe     = mp3_read_probe,
     .read_header    = mp3_read_header,
     .read_packet    = mp3_read_packet,
-    .flags          = AVFMT_GENERIC_INDEX,
-    .extensions     = "mp2,mp3,m2a", /* XXX: use probe */
+    .flags= AVFMT_GENERIC_INDEX,
+    .extensions = "mp2,mp3,m2a", /* XXX: use probe */
 };

@@ -166,7 +166,7 @@ static int decode_frame(AVCodecContext *avctx,
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     LOCOContext * const l = avctx->priv_data;
-    AVFrame * const p = &l->pic;
+    AVFrame * const p= (AVFrame*)&l->pic;
     int decoded;
 
     if(p->data[0])
@@ -299,5 +299,5 @@ AVCodec ff_loco_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("LOCO"),
+    .long_name = NULL_IF_CONFIG_SMALL("LOCO"),
 };

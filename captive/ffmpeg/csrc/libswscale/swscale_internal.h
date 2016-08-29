@@ -34,7 +34,7 @@
 
 #define STR(s) AV_TOSTRING(s) // AV_STRINGIFY is too long
 
-#define YUVRGB_TABLE_HEADROOM 128
+#define YUVRGB_TABLE_HEADROOM 256
 
 #define FAST_BGR2YV12 // use 7-bit instead of 15-bit coefficients
 
@@ -542,6 +542,7 @@ void updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufI
 
 SwsFunc ff_yuv2rgb_init_mmx(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_vis(SwsContext *c);
+SwsFunc ff_yuv2rgb_init_mlib(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_altivec(SwsContext *c);
 SwsFunc ff_yuv2rgb_get_func_ptr_bfin(SwsContext *c);
 void ff_bfin_get_unscaled_swscale(SwsContext *c);
@@ -681,17 +682,7 @@ const char *sws_format_name(enum PixelFormat format);
     (av_pix_fmt_descriptors[x].nb_components >= 2          &&  \
      (av_pix_fmt_descriptors[x].flags & PIX_FMT_PLANAR))
 
-#define isPackedRGB(x)                                         \
-    ((av_pix_fmt_descriptors[x].flags                        & \
-     (PIX_FMT_PLANAR | PIX_FMT_RGB)) == PIX_FMT_RGB)
-
-#define isPlanarRGB(x)                                         \
-    ((av_pix_fmt_descriptors[x].flags                        & \
-     (PIX_FMT_PLANAR | PIX_FMT_RGB)) == (PIX_FMT_PLANAR | PIX_FMT_RGB))
-
-#define usePal(x) ((av_pix_fmt_descriptors[x].flags & PIX_FMT_PAL) ||       \
-                   (av_pix_fmt_descriptors[x].flags & PIX_FMT_PSEUDOPAL) || \
-                   (x) == PIX_FMT_Y400A)
+#define usePal(x) ((av_pix_fmt_descriptors[x].flags & PIX_FMT_PAL) || (x) == PIX_FMT_Y400A)
 
 extern const uint64_t ff_dither4[2];
 extern const uint64_t ff_dither8[2];
@@ -715,14 +706,6 @@ void ff_swscale_get_unscaled_altivec(SwsContext *c);
  */
 SwsFunc ff_getSwsFunc(SwsContext *c);
 
-void ff_sws_init_input_funcs(SwsContext *c);
-void ff_sws_init_output_funcs(SwsContext *c,
-                              yuv2planar1_fn *yuv2plane1,
-                              yuv2planarX_fn *yuv2planeX,
-                              yuv2interleavedX_fn *yuv2nv12cX,
-                              yuv2packed1_fn *yuv2packed1,
-                              yuv2packed2_fn *yuv2packed2,
-                              yuv2packedX_fn *yuv2packedX);
 void ff_sws_init_swScale_altivec(SwsContext *c);
 void ff_sws_init_swScale_mmx(SwsContext *c);
 

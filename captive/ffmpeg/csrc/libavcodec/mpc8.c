@@ -27,6 +27,7 @@
 
 #include "libavutil/lfg.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "get_bits.h"
 #include "dsputil.h"
 #include "mpegaudiodsp.h"
@@ -118,7 +119,7 @@ static av_cold int mpc8_decode_init(AVCodecContext * avctx)
     }
     memset(c->oldDSCF, 0, sizeof(c->oldDSCF));
     av_lfg_init(&c->rnd, 0xDEADBEEF);
-    ff_dsputil_init(&c->dsp, avctx);
+    dsputil_init(&c->dsp, avctx);
     ff_mpadsp_init(&c->mpadsp);
 
     ff_mpc_init();
@@ -138,7 +139,8 @@ static av_cold int mpc8_decode_init(AVCodecContext * avctx)
     c->frames = 1 << (get_bits(&gb, 3) * 2);
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
-    avctx->channel_layout = (avctx->channels==2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
+    avctx->channel_layout = (channels==2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
+    avctx->channels = channels;
 
     if(vlc_initialized) return 0;
     av_log(avctx, AV_LOG_DEBUG, "Initing VLC\n");
@@ -252,7 +254,7 @@ static int mpc8_decode_frame(AVCodecContext * avctx, void *data,
 
     /* get output buffer */
     c->frame.nb_samples = MPC_FRAME_SIZE;
-    if ((res = avctx->get_buffer(avctx, &c->frame)) < 0) {
+    if ((res = ff_get_buffer(avctx, &c->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return res;
     }
@@ -429,5 +431,5 @@ AVCodec ff_mpc8_decoder = {
     .init           = mpc8_decode_init,
     .decode         = mpc8_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Musepack SV8"),
+    .long_name = NULL_IF_CONFIG_SMALL("Musepack SV8"),
 };

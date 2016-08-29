@@ -21,7 +21,6 @@
  */
 
 #include "avcodec.h"
-#include "internal.h"
 #include "bytestream.h"
 
 static av_cold int encode_init(AVCodecContext *avctx)
@@ -34,23 +33,24 @@ static av_cold int encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                        const AVFrame *pic, int *got_packet)
+static int encode_frame(AVCodecContext *avctx, uint8_t *buf,
+                        int buf_size, void *data)
 {
-    int i, j, ret;
+    AVFrame *pic = data;
+    int i, j;
     int aligned_width = FFALIGN(avctx->width, 64);
-    int pad = (aligned_width - avctx->width) * 4;
     uint8_t *src_line;
-    uint8_t *dst;
+    uint8_t *dst = buf;
 
-    if ((ret = ff_alloc_packet2(avctx, pkt, 4 * aligned_width * avctx->height)) < 0)
-        return ret;
+    if (buf_size < 4 * aligned_width * avctx->height) {
+        av_log(avctx, AV_LOG_ERROR, "output buffer too small\n");
+        return AVERROR(ENOMEM);
+    }
 
     avctx->coded_frame->reference = 0;
     avctx->coded_frame->key_frame = 1;
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     src_line = pic->data[0];
-    dst = pkt->data;
 
     for (i = 0; i < avctx->height; i++) {
         uint16_t *src = (uint16_t *)src_line;
@@ -68,14 +68,11 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             else
                 bytestream_put_be32(&dst, pixel);
         }
-        memset(dst, 0, pad);
-        dst += pad;
+        dst += aligned_width - avctx->width;
         src_line += pic->linesize[0];
     }
 
-    pkt->flags |= AV_PKT_FLAG_KEY;
-    *got_packet = 1;
-    return 0;
+    return 4 * aligned_width * avctx->height;
 }
 
 static av_cold int encode_close(AVCodecContext *avctx)
@@ -91,7 +88,7 @@ AVCodec ff_r210_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = CODEC_ID_R210,
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = encode_close,
     .pix_fmts       = (const enum PixelFormat[]) { PIX_FMT_RGB48, PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("Uncompressed RGB 10-bit"),
@@ -103,7 +100,7 @@ AVCodec ff_r10k_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = CODEC_ID_R10K,
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = encode_close,
     .pix_fmts       = (const enum PixelFormat[]) { PIX_FMT_RGB48, PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("AJA Kona 10-bit RGB Codec"),
@@ -115,7 +112,7 @@ AVCodec ff_avrp_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = CODEC_ID_AVRP,
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = encode_close,
     .pix_fmts       = (const enum PixelFormat[]) { PIX_FMT_RGB48, PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("Avid 1:1 10-bit RGB Packer"),

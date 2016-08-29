@@ -81,7 +81,8 @@ static int probe(AVProbeData *p)
     return AVPROBE_SCORE_MAX / 2;
 }
 
-static int read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s,
+                           AVFormatParameters *ap)
 {
     MmDemuxContext *mm = s->priv_data;
     AVIOContext *pb = s->pb;

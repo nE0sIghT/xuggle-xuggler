@@ -39,7 +39,6 @@ static const AVCodecTag flv_video_codec_ids[] = {
     {CODEC_ID_FLASHSV2, FLV_CODECID_SCREEN2},
     {CODEC_ID_VP6F,    FLV_CODECID_VP6   },
     {CODEC_ID_VP6,     FLV_CODECID_VP6   },
-    {CODEC_ID_VP6A,    FLV_CODECID_VP6A  },
     {CODEC_ID_H264,    FLV_CODECID_H264  },
     {CODEC_ID_NONE,    0}
 };
@@ -408,7 +407,7 @@ static int flv_write_packet(AVFormatContext *s, AVPacket *pkt)
 //    av_log(s, AV_LOG_DEBUG, "type:%d pts: %"PRId64" size:%d\n", enc->codec_type, timestamp, size);
 
     if(enc->codec_id == CODEC_ID_VP6 || enc->codec_id == CODEC_ID_VP6F ||
-       enc->codec_id == CODEC_ID_VP6A || enc->codec_id == CODEC_ID_AAC)
+       enc->codec_id == CODEC_ID_AAC)
         flags_size= 2;
     else if(enc->codec_id == CODEC_ID_H264 || enc->codec_id == CODEC_ID_MPEG4)
         flags_size= 5;
@@ -447,8 +446,13 @@ static int flv_write_packet(AVFormatContext *s, AVPacket *pkt)
         }
     } else if (enc->codec_id == CODEC_ID_AAC && pkt->size > 2 &&
                (AV_RB16(pkt->data) & 0xfff0) == 0xfff0) {
-        av_log(s, AV_LOG_ERROR, "malformated aac bitstream, use -absf aac_adtstoasc\n");
-        return -1;
+        if (!s->streams[pkt->stream_index]->nb_frames) {
+        av_log(s, AV_LOG_ERROR, "Malformed AAC bitstream detected: "
+               "use audio bitstream filter 'aac_adtstoasc' to fix it "
+               "('-bsf:a aac_adtstoasc' option with ffmpeg)\n");
+        return AVERROR_INVALIDDATA;
+        }
+        av_log(s, AV_LOG_WARNING, "aac bitstream error\n");
     }
     if (flv->delay == AV_NOPTS_VALUE)
         flv->delay = -pkt->dts;
@@ -480,7 +484,7 @@ static int flv_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (enc->codec_id == CODEC_ID_VP6)
         avio_w8(pb,0);
-    if (enc->codec_id == CODEC_ID_VP6F || enc->codec_id == CODEC_ID_VP6A)
+    if (enc->codec_id == CODEC_ID_VP6F)
         avio_w8(pb, enc->extradata_size ? enc->extradata[0] : 0);
     else if (enc->codec_id == CODEC_ID_AAC)
         avio_w8(pb,1); // AAC raw
@@ -516,8 +520,6 @@ AVOutputFormat ff_flv_muxer = {
     .write_header   = flv_write_header,
     .write_packet   = flv_write_packet,
     .write_trailer  = flv_write_trailer,
-    .codec_tag      = (const AVCodecTag* const []){
-        flv_video_codec_ids, flv_audio_codec_ids, 0
-    },
-    .flags          = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
+    .codec_tag= (const AVCodecTag* const []){flv_video_codec_ids, flv_audio_codec_ids, 0},
+    .flags= AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
 };

@@ -42,7 +42,7 @@ static av_always_inline void predict_slice_buffered(SnowContext *s, slice_buffer
     int x, y, mb_x;
     int block_size = MB_SIZE >> s->block_max_depth;
     int block_w    = plane_index ? block_size/2 : block_size;
-    const uint8_t *obmc  = plane_index ? ff_obmc_tab[s->block_max_depth+1] : ff_obmc_tab[s->block_max_depth];
+    const uint8_t *obmc  = plane_index ? obmc_tab[s->block_max_depth+1] : obmc_tab[s->block_max_depth];
     int obmc_stride= plane_index ? block_size : 2*block_size;
     int ref_stride= s->current_picture.linesize[plane_index];
     uint8_t *dst8= s->current_picture.data[plane_index];
@@ -95,7 +95,7 @@ static inline void decode_subband_slice_buffered(SnowContext *s, SubBand *b, sli
     const int w= b->width;
     int y;
     const int qlog= av_clip(s->qlog + b->qlog, 0, QROOT*16);
-    int qmul= ff_qexp[qlog&(QROOT-1)]<<(qlog>>QSHIFT);
+    int qmul= qexp[qlog&(QROOT-1)]<<(qlog>>QSHIFT);
     int qadd= (s->qbias*qmul)>>QBIAS_SHIFT;
     int new_index = 0;
 
@@ -154,7 +154,7 @@ static int decode_q_branch(SnowContext *s, int level, int x, int y){
         int l = left->color[0];
         int cb= left->color[1];
         int cr= left->color[2];
-        int ref = 0;
+        unsigned ref = 0;
         int ref_context= av_log2(2*left->ref) + av_log2(2*top->ref);
         int mx_context= av_log2(2*FFABS(left->mx - top->mx)) + 0*av_log2(2*FFABS(tr->mx - top->mx));
         int my_context= av_log2(2*FFABS(left->my - top->my)) + 0*av_log2(2*FFABS(tr->my - top->my));
@@ -191,7 +191,7 @@ static int decode_q_branch(SnowContext *s, int level, int x, int y){
 static void dequantize_slice_buffered(SnowContext *s, slice_buffer * sb, SubBand *b, IDWTELEM *src, int stride, int start_y, int end_y){
     const int w= b->width;
     const int qlog= av_clip(s->qlog + b->qlog, 0, QROOT*16);
-    const int qmul= ff_qexp[qlog&(QROOT-1)]<<(qlog>>QSHIFT);
+    const int qmul= qexp[qlog&(QROOT-1)]<<(qlog>>QSHIFT);
     const int qadd= (s->qbias*qmul)>>QBIAS_SHIFT;
     int x,y;
 
@@ -354,9 +354,14 @@ static int decode_header(SnowContext *s){
 
 static av_cold int decode_init(AVCodecContext *avctx)
 {
+    int ret;
+
     avctx->pix_fmt= PIX_FMT_YUV420P;
 
-    ff_snow_common_init(avctx);
+    if ((ret = ff_snow_common_init(avctx)) < 0) {
+        ff_snow_common_end(avctx->priv_data);
+        return ret;
+    }
 
     return 0;
 }
@@ -559,5 +564,5 @@ AVCodec ff_snow_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/,
-    .long_name      = NULL_IF_CONFIG_SMALL("Snow"),
+    .long_name = NULL_IF_CONFIG_SMALL("Snow"),
 };

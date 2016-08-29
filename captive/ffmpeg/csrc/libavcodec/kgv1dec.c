@@ -27,6 +27,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
+#include "internal.h"
 
 typedef struct {
     AVCodecContext *avctx;
@@ -70,7 +71,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     maxcnt = w * h;
 
     c->cur.reference = 3;
-    if ((res = avctx->get_buffer(avctx, &c->cur)) < 0)
+    if ((res = ff_get_buffer(avctx, &c->cur)) < 0)
         return res;
     out  = (uint16_t *) c->cur.data[0];
     if (c->prev.data[0]) {
@@ -189,5 +190,5 @@ AVCodec ff_kgv1_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .flush          = decode_flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("Kega Game Video"),
+    .long_name = NULL_IF_CONFIG_SMALL("Kega Game Video"),
 };

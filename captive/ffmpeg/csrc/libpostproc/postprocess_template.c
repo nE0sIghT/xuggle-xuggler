@@ -3225,7 +3225,7 @@ static void RENAME(postProcess)(const uint8_t src[], int srcStride, uint8_t dst[
 
         c.frameNum++;
         // first frame is fscked so we ignore it
-        if(c.frameNum == 1) yHistogram[0]= width*height/64*15/256;
+        if(c.frameNum == 1) yHistogram[0]= width*(uint64_t)height/64*15/256;
 
         for(i=0; i<256; i++){
             sum+= yHistogram[i];
@@ -3549,7 +3549,7 @@ static void RENAME(postProcess)(const uint8_t src[], int srcStride, uint8_t dst[
                 {
                     RENAME(tempNoiseReducer)(dstBlock-8, stride,
                             c.tempBlurred[isColor] + y*dstStride + x,
-                            c.tempBlurredPast[isColor] + (y>>3)*256 + (x>>3) + 256,
+                            c.tempBlurredPast[isColor] + (y>>3)*256 + (x>>3),
                             c.ppMode.maxTmpNoise);
                 }
             }
@@ -3571,7 +3571,7 @@ static void RENAME(postProcess)(const uint8_t src[], int srcStride, uint8_t dst[
         if((mode & TEMP_NOISE_FILTER)){
             RENAME(tempNoiseReducer)(dstBlock-8, dstStride,
                     c.tempBlurred[isColor] + y*dstStride + x,
-                    c.tempBlurredPast[isColor] + (y>>3)*256 + (x>>3) + 256,
+                    c.tempBlurredPast[isColor] + (y>>3)*256 + (x>>3),
                     c.ppMode.maxTmpNoise);
         }
 

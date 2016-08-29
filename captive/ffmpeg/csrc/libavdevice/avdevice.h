@@ -78,3 +78,4 @@ const char *avdevice_license(void);
 void avdevice_register_all(void);
 
 #endif /* AVDEVICE_AVDEVICE_H */
+

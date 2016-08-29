@@ -61,24 +61,6 @@
 #define TOP_BACK_CENTER        16
 #define TOP_BACK_RIGHT         17
 
-int swr_set_matrix(struct SwrContext *s, const double *matrix, int stride)
-{
-    int nb_in, nb_out, in, out;
-
-    if (!s || s->in_convert) // s needs to be allocated but not initialized
-        return AVERROR(EINVAL);
-    memset(s->matrix, 0, sizeof(s->matrix));
-    nb_in  = av_get_channel_layout_nb_channels(s->in_ch_layout);
-    nb_out = av_get_channel_layout_nb_channels(s->out_ch_layout);
-    for (out = 0; out < nb_out; out++) {
-        for (in = 0; in < nb_in; in++)
-            s->matrix[out][in] = matrix[in];
-        matrix += stride;
-    }
-    s->rematrix_custom = 1;
-    return 0;
-}
-
 static int even(int64_t layout){
     if(!layout) return 1;
     if(layout&(layout-1)) return 1;
@@ -102,14 +84,12 @@ static int sane_layout(int64_t layout){
     return 1;
 }
 
-static int auto_matrix(SwrContext *s)
-{
+int swri_rematrix_init(SwrContext *s){
     int i, j, out_i;
     double matrix[64][64]={{0}};
     int64_t unaccounted= s->in_ch_layout & ~s->out_ch_layout;
     double maxcoef=0;
 
-    memset(s->matrix, 0, sizeof(s->matrix));
     for(i=0; i<64; i++){
         if(s->in_ch_layout & s->out_ch_layout & (1LL<<i))
             matrix[i][i]= 1.0;
@@ -209,17 +189,23 @@ static int auto_matrix(SwrContext *s)
         }else
             av_assert0(0);
     }
+
+    //FIXME quantize for integeres
     for(out_i=i=0; i<64; i++){
         double sum=0;
         int in_i=0;
+        int ch_in=0;
         for(j=0; j<64; j++){
             s->matrix[out_i][in_i]= matrix[i][j];
+            s->matrix32[out_i][in_i]= lrintf(matrix[i][j] * 32768);
             if(matrix[i][j]){
+                s->matrix_ch[out_i][++ch_in]= in_i;
                 sum += fabs(matrix[i][j]);
             }
             if(s->in_ch_layout & (1ULL<<j))
                 in_i++;
         }
+        s->matrix_ch[out_i][0]= ch_in;
         maxcoef= FFMAX(maxcoef, sum);
         if(s->out_ch_layout & (1ULL<<i))
             out_i++;
@@ -232,6 +218,7 @@ static int auto_matrix(SwrContext *s)
         for(i=0; i<SWR_CH_MAX; i++)
             for(j=0; j<SWR_CH_MAX; j++){
                 s->matrix[i][j] /= maxcoef;
+                s->matrix32[i][j]= lrintf(s->matrix[i][j] * 32768);
             }
     }
 
@@ -239,6 +226,7 @@ static int auto_matrix(SwrContext *s)
         for(i=0; i<SWR_CH_MAX; i++)
             for(j=0; j<SWR_CH_MAX; j++){
                 s->matrix[i][j] *= s->rematrix_volume;
+                s->matrix32[i][j]= lrintf(s->matrix[i][j] * 32768);
             }
     }
 
@@ -251,27 +239,6 @@ static int auto_matrix(SwrContext *s)
     return 0;
 }
 
-int swri_rematrix_init(SwrContext *s){
-    int i, j;
-
-    if (!s->rematrix_custom) {
-        int r = auto_matrix(s);
-        if (r)
-            return r;
-    }
-    //FIXME quantize for integeres
-    for (i = 0; i < SWR_CH_MAX; i++) {
-        int ch_in=0;
-        for (j = 0; j < SWR_CH_MAX; j++) {
-            s->matrix32[i][j]= lrintf(s->matrix[i][j] * 32768);
-            if(s->matrix[i][j])
-                s->matrix_ch[i][++ch_in]= j;
-        }
-        s->matrix_ch[i][0]= ch_in;
-    }
-    return 0;
-}
-
 int swri_rematrix(SwrContext *s, AudioData *out, AudioData *in, int len, int mustcopy){
     int out_i, in_i, i, j;
 
@@ -280,9 +247,6 @@ int swri_rematrix(SwrContext *s, AudioData *out, AudioData *in, int len, int mus
 
     for(out_i=0; out_i<out->ch_count; out_i++){
         switch(s->matrix_ch[out_i][0]){
-        case 0:
-            memset(out->ch[out_i], 0, len * (s->int_sample_fmt == AV_SAMPLE_FMT_FLT ? sizeof(float) : sizeof(int16_t)));
-            break;
         case 1:
             in_i= s->matrix_ch[out_i][1];
             if(mustcopy || s->matrix[out_i][in_i]!=1.0){

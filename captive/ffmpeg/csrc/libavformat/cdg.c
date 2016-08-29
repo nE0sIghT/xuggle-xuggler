@@ -26,7 +26,7 @@
 #define CDG_COMMAND        0x09
 #define CDG_MASK           0x3F
 
-static int read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     AVStream *vst;
     int ret;
@@ -73,6 +73,6 @@ AVInputFormat ff_cdg_demuxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("CD Graphics Format"),
     .read_header    = read_header,
     .read_packet    = read_packet,
-    .flags          = AVFMT_GENERIC_INDEX,
-    .extensions     = "cdg",
+    .flags= AVFMT_GENERIC_INDEX,
+    .extensions = "cdg"
 };

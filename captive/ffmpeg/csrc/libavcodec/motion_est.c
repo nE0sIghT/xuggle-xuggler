@@ -300,7 +300,7 @@ int ff_init_me(MpegEncContext *s){
     int cache_size= FFMIN(ME_MAP_SIZE>>ME_MAP_SHIFT, 1<<ME_MAP_SHIFT);
     int dia_size= FFMAX(FFABS(s->avctx->dia_size)&255, FFABS(s->avctx->pre_dia_size)&255);
 
-    if(FFMIN(s->avctx->dia_size, s->avctx->pre_dia_size) < -ME_MAP_SIZE){
+    if(FFMIN(s->avctx->dia_size, s->avctx->pre_dia_size) < -FFMIN(ME_MAP_SIZE, MAX_SAB_SIZE)){
         av_log(s->avctx, AV_LOG_ERROR, "ME_MAP size is too small for SAB diamond\n");
         return -1;
     }
@@ -1435,8 +1435,9 @@ static inline int bidir_refine(MpegEncContext * s, int mb_x, int mb_y)
 #define HASH(fx,fy,bx,by) ((fx)+17*(fy)+63*(bx)+117*(by))
 #define HASH8(fx,fy,bx,by) ((uint8_t)HASH(fx,fy,bx,by))
     int hashidx= HASH(motion_fx,motion_fy, motion_bx, motion_by);
-    uint8_t map[256] = { 0 };
+    uint8_t map[256];
 
+    memset(map,0,sizeof(map));
     map[hashidx&255] = 1;
 
     fbmin= check_bidir_mv(s, motion_fx, motion_fy,

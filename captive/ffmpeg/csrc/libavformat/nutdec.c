@@ -81,16 +81,8 @@ static inline int64_t get_s_trace(AVIOContext *bc, char *file, char *func, int l
     av_log(NULL, AV_LOG_DEBUG, "get_s %5"PRId64" / %"PRIX64" in %s %s:%d\n", v, v, file, func, line);
     return v;
 }
-
-static inline uint64_t get_vb_trace(AVIOContext *bc, char *file, char *func, int line){
-    uint64_t v= get_vb(bc);
-
-    av_log(NULL, AV_LOG_DEBUG, "get_vb %5"PRId64" / %"PRIX64" in %s %s:%d\n", v, v, file, func, line);
-    return v;
-}
 #define ffio_read_varlen(bc)  get_v_trace(bc, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 #define get_s(bc)  get_s_trace(bc, __FILE__, __PRETTY_FUNCTION__, __LINE__)
-#define get_vb(bc)  get_vb_trace(bc, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 #endif
 
 static int get_packetheader(NUTContext *nut, AVIOContext *bc, int calculate_checksum, uint64_t startcode)
@@ -596,7 +588,7 @@ fail:
     return ret;
 }
 
-static int nut_read_header(AVFormatContext *s)
+static int nut_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     NUTContext *nut = s->priv_data;
     AVIOContext *bc = s->pb;
@@ -931,10 +923,7 @@ AVInputFormat ff_nut_demuxer = {
     .read_packet    = nut_read_packet,
     .read_close     = nut_read_close,
     .read_seek      = read_seek,
-    .extensions     = "nut",
-    .codec_tag      = (const AVCodecTag * const []) {
-        ff_codec_bmp_tags, ff_nut_video_tags, ff_codec_wav_tags,
-        ff_nut_subtitle_tags, 0
-    },
+    .extensions = "nut",
+    .codec_tag = (const AVCodecTag * const []) { ff_codec_bmp_tags, ff_nut_video_tags, ff_codec_wav_tags, ff_nut_subtitle_tags, 0 },
 };
 #endif

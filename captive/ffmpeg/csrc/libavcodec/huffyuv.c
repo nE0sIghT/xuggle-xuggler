@@ -28,8 +28,8 @@
  * huffyuv codec for libavcodec.
  */
 
+#include "libavutil/avassert.h"
 #include "avcodec.h"
-#include "internal.h"
 #include "get_bits.h"
 #include "put_bits.h"
 #include "dsputil.h"
@@ -87,16 +87,14 @@ typedef struct HYuvContext{
 static const unsigned char classic_shift_luma[classic_shift_luma_table_size + FF_INPUT_BUFFER_PADDING_SIZE] = {
   34,36,35,69,135,232,9,16,10,24,11,23,12,16,13,10,14,8,15,8,
   16,8,17,20,16,10,207,206,205,236,11,8,10,21,9,23,8,8,199,70,
-  69,68, 0,
-  0,0,0,0,0,0,0,0,
+  69,68, 0
 };
 
 #define classic_shift_chroma_table_size 59
 static const unsigned char classic_shift_chroma[classic_shift_chroma_table_size + FF_INPUT_BUFFER_PADDING_SIZE] = {
   66,36,37,38,39,40,41,75,76,77,110,239,144,81,82,83,84,85,118,183,
   56,57,88,89,56,89,154,57,58,57,26,141,57,56,58,57,58,57,184,119,
-  214,245,116,83,82,49,80,79,78,77,44,75,41,40,39,38,37,36,34, 0,
-  0,0,0,0,0,0,0,0,
+  214,245,116,83,82,49,80,79,78,77,44,75,41,40,39,38,37,36,34, 0
 };
 
 static const unsigned char classic_add_luma[256] = {
@@ -137,7 +135,7 @@ static const unsigned char classic_add_chroma[256] = {
     6, 12,  8, 10,  7,  9,  6,  4,  6,  2,  2,  3,  3,  3,  3,  2,
 };
 
-static inline int sub_left_prediction(HYuvContext *s, uint8_t *dst, const uint8_t *src, int w, int left){
+static inline int sub_left_prediction(HYuvContext *s, uint8_t *dst, uint8_t *src, int w, int left){
     int i;
     if(w<32){
         for(i=0; i<w; i++){
@@ -157,7 +155,7 @@ static inline int sub_left_prediction(HYuvContext *s, uint8_t *dst, const uint8_
     }
 }
 
-static inline void sub_left_prediction_bgr32(HYuvContext *s, uint8_t *dst, const uint8_t *src, int w, int *red, int *green, int *blue, int *alpha){
+static inline void sub_left_prediction_bgr32(HYuvContext *s, uint8_t *dst, uint8_t *src, int w, int *red, int *green, int *blue, int *alpha){
     int i;
     int r,g,b,a;
     r= *red;
@@ -185,7 +183,7 @@ static inline void sub_left_prediction_bgr32(HYuvContext *s, uint8_t *dst, const
     *alpha= src[(w-1)*4+A];
 }
 
-static inline void sub_left_prediction_rgb24(HYuvContext *s, uint8_t *dst, const uint8_t *src, int w, int *red, int *green, int *blue){
+static inline void sub_left_prediction_rgb24(HYuvContext *s, uint8_t *dst, uint8_t *src, int w, int *red, int *green, int *blue){
     int i;
     int r,g,b;
     r= *red;
@@ -304,22 +302,25 @@ static void generate_len_table(uint8_t *dst, const uint64_t *stats){
 }
 #endif /* CONFIG_HUFFYUV_ENCODER || CONFIG_FFVHUFF_ENCODER */
 
-static void generate_joint_tables(HYuvContext *s){
+static int generate_joint_tables(HYuvContext *s){
     uint16_t symbols[1<<VLC_BITS];
     uint16_t bits[1<<VLC_BITS];
     uint8_t len[1<<VLC_BITS];
+    int ret;
+
     if(s->bitstream_bpp < 24){
         int p, i, y, u;
         for(p=0; p<3; p++){
             for(i=y=0; y<256; y++){
                 int len0 = s->len[0][y];
                 int limit = VLC_BITS - len0;
-                if(limit <= 0)
+                if(limit <= 0 || !len0)
                     continue;
                 for(u=0; u<256; u++){
                     int len1 = s->len[p][u];
-                    if(len1 > limit)
+                    if (len1 > limit || !len1)
                         continue;
+                    av_assert0(i < (1 << VLC_BITS));
                     len[i] = len0 + len1;
                     bits[i] = (s->bits[0][y] << len1) + s->bits[p][u];
                     symbols[i] = (y<<8) + u;
@@ -328,7 +329,9 @@ static void generate_joint_tables(HYuvContext *s){
                 }
             }
             ff_free_vlc(&s->vlc[3+p]);
-            ff_init_vlc_sparse(&s->vlc[3+p], VLC_BITS, i, len, 1, 1, bits, 2, 2, symbols, 2, 2, 0);
+            if ((ret = ff_init_vlc_sparse(&s->vlc[3 + p], VLC_BITS, i, len, 1, 1,
+                                          bits, 2, 2, symbols, 2, 2, 0)) < 0)
+                return ret;
         }
     }else{
         uint8_t (*map)[4] = (uint8_t(*)[4])s->pix_bgr_map;
@@ -341,18 +344,19 @@ static void generate_joint_tables(HYuvContext *s){
         for(i=0, g=-16; g<16; g++){
             int len0 = s->len[p0][g&255];
             int limit0 = VLC_BITS - len0;
-            if(limit0 < 2)
+            if (limit0 < 2 || !len0)
                 continue;
             for(b=-16; b<16; b++){
                 int len1 = s->len[p1][b&255];
                 int limit1 = limit0 - len1;
-                if(limit1 < 1)
+                if (limit1 < 1 || !len1)
                     continue;
                 code = (s->bits[p0][g&255] << len1) + s->bits[p1][b&255];
                 for(r=-16; r<16; r++){
                     int len2 = s->len[2][r&255];
-                    if(len2 > limit1)
+                    if (len2 > limit1 || !len2)
                         continue;
+                    av_assert0(i < (1 << VLC_BITS));
                     len[i] = len0 + len1 + len2;
                     bits[i] = (code << len2) + s->bits[2][r&255];
                     if(s->decorrelate){
@@ -369,41 +373,52 @@ static void generate_joint_tables(HYuvContext *s){
             }
         }
         ff_free_vlc(&s->vlc[3]);
-        init_vlc(&s->vlc[3], VLC_BITS, i, len, 1, 1, bits, 2, 2, 0);
+        if ((ret = init_vlc(&s->vlc[3], VLC_BITS, i, len, 1, 1,
+                            bits, 2, 2, 0)) < 0)
+            return ret;
     }
+    return 0;
 }
 
 static int read_huffman_tables(HYuvContext *s, const uint8_t *src, int length){
     GetBitContext gb;
-    int i;
+    int i, ret;
 
-    init_get_bits(&gb, src, length*8);
+    if ((ret = init_get_bits(&gb, src, length * 8)) < 0)
+        return ret;
 
     for(i=0; i<3; i++){
-        if(read_len_table(s->len[i], &gb)<0)
-            return -1;
-        if(generate_bits_table(s->bits[i], s->len[i])<0){
-            return -1;
-        }
+        if ((ret = read_len_table(s->len[i], &gb)) < 0)
+            return ret;
+        if ((ret = generate_bits_table(s->bits[i], s->len[i])) < 0)
+            return ret;
         ff_free_vlc(&s->vlc[i]);
-        init_vlc(&s->vlc[i], VLC_BITS, 256, s->len[i], 1, 1, s->bits[i], 4, 4, 0);
+        if ((ret = init_vlc(&s->vlc[i], VLC_BITS, 256, s->len[i], 1, 1,
+                            s->bits[i], 4, 4, 0)) < 0)
+            return ret;
     }
 
-    generate_joint_tables(s);
+    if ((ret = generate_joint_tables(s)) < 0)
+        return ret;
 
     return (get_bits_count(&gb)+7)/8;
 }
 
 static int read_old_huffman_tables(HYuvContext *s){
+#if 1
     GetBitContext gb;
-    int i;
+    int i, ret;
 
-    init_get_bits(&gb, classic_shift_luma, classic_shift_luma_table_size*8);
-    if(read_len_table(s->len[0], &gb)<0)
-        return -1;
-    init_get_bits(&gb, classic_shift_chroma, classic_shift_chroma_table_size*8);
-    if(read_len_table(s->len[1], &gb)<0)
-        return -1;
+    if ((ret = init_get_bits(&gb, classic_shift_luma,
+                             classic_shift_luma_table_size * 8)) < 0)
+        return ret;
+    if ((ret = read_len_table(s->len[0], &gb)) < 0)
+        return ret;
+    if ((ret = init_get_bits(&gb, classic_shift_chroma,
+                             classic_shift_chroma_table_size * 8)) < 0)
+        return ret;
+    if ((ret = read_len_table(s->len[1], &gb)) < 0)
+        return ret;
 
     for(i=0; i<256; i++) s->bits[0][i] = classic_add_luma  [i];
     for(i=0; i<256; i++) s->bits[1][i] = classic_add_chroma[i];
@@ -417,12 +432,19 @@ static int read_old_huffman_tables(HYuvContext *s){
 
     for(i=0; i<3; i++){
         ff_free_vlc(&s->vlc[i]);
-        init_vlc(&s->vlc[i], VLC_BITS, 256, s->len[i], 1, 1, s->bits[i], 4, 4, 0);
+        if ((ret = init_vlc(&s->vlc[i], VLC_BITS, 256, s->len[i], 1, 1,
+                            s->bits[i], 4, 4, 0)) < 0)
+            return ret;
     }
 
-    generate_joint_tables(s);
+    if ((ret = generate_joint_tables(s)) < 0)
+        return ret;
 
     return 0;
+#else
+    av_log(s->avctx, AV_LOG_DEBUG, "v1 huffyuv is not supported \n");
+    return -1;
+#endif
 }
 
 static av_cold void alloc_temp(HYuvContext *s){
@@ -443,7 +465,7 @@ static av_cold int common_init(AVCodecContext *avctx){
     s->avctx= avctx;
     s->flags= avctx->flags;
 
-    ff_dsputil_init(&s->dsp, avctx);
+    dsputil_init(&s->dsp, avctx);
 
     s->width= avctx->width;
     s->height= avctx->height;
@@ -456,6 +478,7 @@ static av_cold int common_init(AVCodecContext *avctx){
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     HYuvContext *s = avctx->priv_data;
+    int ret;
 
     common_init(avctx);
     memset(s->vlc, 0, 3*sizeof(VLC));
@@ -491,8 +514,9 @@ s->bgr32=1;
         s->interlaced= (interlace==1) ? 1 : (interlace==2) ? 0 : s->interlaced;
         s->context= ((uint8_t*)avctx->extradata)[2] & 0x40 ? 1 : 0;
 
-        if(read_huffman_tables(s, ((uint8_t*)avctx->extradata)+4, avctx->extradata_size-4) < 0)
-            return -1;
+        if ((ret = read_huffman_tables(s, ((uint8_t*)avctx->extradata) + 4,
+                                       avctx->extradata_size - 4)) < 0)
+            return ret;
     }else{
         switch(avctx->bits_per_coded_sample&7){
         case 1:
@@ -519,8 +543,8 @@ s->bgr32=1;
         s->bitstream_bpp= avctx->bits_per_coded_sample & ~7;
         s->context= 0;
 
-        if(read_old_huffman_tables(s) < 0)
-            return -1;
+        if ((ret = read_old_huffman_tables(s)) < 0)
+            return ret;
     }
 
     switch(s->bitstream_bpp){
@@ -546,8 +570,10 @@ s->bgr32=1;
         return AVERROR_INVALIDDATA;
     }
 
-    if ((avctx->pix_fmt == PIX_FMT_YUV422P || avctx->pix_fmt == PIX_FMT_YUV420P) && avctx->width & 1) {
-        av_log(avctx, AV_LOG_ERROR, "width must be even for this colorspace\n");
+    if (s->predictor == MEDIAN && avctx->pix_fmt == PIX_FMT_YUV422P &&
+        avctx->width % 4) {
+        av_log(avctx, AV_LOG_ERROR, "width must be multiple of 4 "
+               "for this combination of colorspace and predictor type.\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -561,7 +587,7 @@ s->bgr32=1;
 static av_cold int decode_init_thread_copy(AVCodecContext *avctx)
 {
     HYuvContext *s = avctx->priv_data;
-    int i;
+    int i, ret;
 
     avctx->coded_frame= &s->picture;
     alloc_temp(s);
@@ -570,11 +596,12 @@ static av_cold int decode_init_thread_copy(AVCodecContext *avctx)
         s->vlc[i].table = NULL;
 
     if(s->version==2){
-        if(read_huffman_tables(s, ((uint8_t*)avctx->extradata)+4, avctx->extradata_size) < 0)
-            return -1;
+        if ((ret = read_huffman_tables(s, ((uint8_t*)avctx->extradata) + 4,
+                                       avctx->extradata_size)) < 0)
+            return ret;
     }else{
-        if(read_old_huffman_tables(s) < 0)
-            return -1;
+        if ((ret = read_old_huffman_tables(s)) < 0)
+            return ret;
     }
 
     return 0;
@@ -620,12 +647,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     switch(avctx->pix_fmt){
     case PIX_FMT_YUV420P:
+        s->bitstream_bpp= 12;
+        break;
     case PIX_FMT_YUV422P:
-        if (s->width & 1) {
-            av_log(avctx, AV_LOG_ERROR, "width must be even for this colorspace\n");
-            return AVERROR(EINVAL);
-        }
-        s->bitstream_bpp = avctx->pix_fmt == PIX_FMT_YUV420P ? 12 : 16;
+        s->bitstream_bpp= 16;
         break;
     case PIX_FMT_RGB32:
         s->bitstream_bpp= 32;
@@ -999,7 +1024,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     const int height= s->height;
     int fake_ystride, fake_ustride, fake_vstride;
     AVFrame * const p= &s->picture;
-    int table_size= 0;
+    int table_size = 0, ret;
 
     AVFrame *picture = data;
 
@@ -1014,21 +1039,23 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         ff_thread_release_buffer(avctx, p);
 
     p->reference= 0;
-    if(ff_thread_get_buffer(avctx, p) < 0){
+    if ((ret = ff_thread_get_buffer(avctx, p)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
     if(s->context){
         table_size = read_huffman_tables(s, s->bitstream_buffer, buf_size);
         if(table_size < 0)
-            return -1;
+            return table_size;
     }
 
     if((unsigned)(buf_size-table_size) >= INT_MAX/8)
         return -1;
 
-    init_get_bits(&s->gb, s->bitstream_buffer+table_size, (buf_size-table_size)*8);
+    if ((ret = init_get_bits(&s->gb, s->bitstream_buffer + table_size,
+                             (buf_size - table_size) * 8)) < 0)
+        return ret;
 
     fake_ystride= s->interlaced ? p->linesize[0]*2  : p->linesize[0];
     fake_ustride= s->interlaced ? p->linesize[1]*2  : p->linesize[1];
@@ -1268,10 +1295,9 @@ static av_cold int decode_end(AVCodecContext *avctx)
 #endif /* CONFIG_HUFFYUV_DECODER || CONFIG_FFVHUFF_DECODER */
 
 #if CONFIG_HUFFYUV_ENCODER || CONFIG_FFVHUFF_ENCODER
-static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                        const AVFrame *pict, int *got_packet)
-{
+static int encode_frame(AVCodecContext *avctx, unsigned char *buf, int buf_size, void *data){
     HYuvContext *s = avctx->priv_data;
+    AVFrame *pict = data;
     const int width= s->width;
     const int width2= s->width>>1;
     const int height= s->height;
@@ -1279,10 +1305,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     const int fake_ustride= s->interlaced ? pict->linesize[1]*2  : pict->linesize[1];
     const int fake_vstride= s->interlaced ? pict->linesize[2]*2  : pict->linesize[2];
     AVFrame * const p= &s->picture;
-    int i, j, size = 0, ret;
-
-    if ((ret = ff_alloc_packet2(avctx, pkt, width * height * 3 * 4 + FF_MIN_BUFFER_SIZE)) < 0)
-        return ret;
+    int i, j, size=0;
 
     *p = *pict;
     p->pict_type= AV_PICTURE_TYPE_I;
@@ -1293,7 +1316,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             generate_len_table(s->len[i], s->stats[i]);
             if(generate_bits_table(s->bits[i], s->len[i])<0)
                 return -1;
-            size += store_table(s, s->len[i], &pkt->data[size]);
+            size+= store_table(s, s->len[i], &buf[size]);
         }
 
         for(i=0; i<3; i++)
@@ -1301,7 +1324,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                 s->stats[i][j] >>= 1;
     }
 
-    init_put_bits(&s->pb, pkt->data + size, pkt->size - size);
+    init_put_bits(&s->pb, buf+size, buf_size-size);
 
     if(avctx->pix_fmt == PIX_FMT_YUV422P || avctx->pix_fmt == PIX_FMT_YUV420P){
         int lefty, leftu, leftv, y, cy;
@@ -1484,16 +1507,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         avctx->stats_out[0] = '\0';
     if(!(s->avctx->flags2 & CODEC_FLAG2_NO_OUTPUT)){
         flush_put_bits(&s->pb);
-        s->dsp.bswap_buf((uint32_t*)pkt->data, (uint32_t*)pkt->data, size);
+        s->dsp.bswap_buf((uint32_t*)buf, (uint32_t*)buf, size);
     }
 
     s->picture_number++;
 
-    pkt->size   = size*4;
-    pkt->flags |= AV_PKT_FLAG_KEY;
-    *got_packet = 1;
-
-    return 0;
+    return size*4;
 }
 
 static av_cold int encode_end(AVCodecContext *avctx)
@@ -1511,33 +1530,31 @@ static av_cold int encode_end(AVCodecContext *avctx)
 
 #if CONFIG_HUFFYUV_DECODER
 AVCodec ff_huffyuv_decoder = {
-    .name             = "huffyuv",
-    .type             = AVMEDIA_TYPE_VIDEO,
-    .id               = CODEC_ID_HUFFYUV,
-    .priv_data_size   = sizeof(HYuvContext),
-    .init             = decode_init,
-    .close            = decode_end,
-    .decode           = decode_frame,
-    .capabilities     = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND |
-                        CODEC_CAP_FRAME_THREADS,
+    .name           = "huffyuv",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_HUFFYUV,
+    .priv_data_size = sizeof(HYuvContext),
+    .init           = decode_init,
+    .close          = decode_end,
+    .decode         = decode_frame,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_FRAME_THREADS,
     .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy),
-    .long_name        = NULL_IF_CONFIG_SMALL("Huffyuv / HuffYUV"),
+    .long_name = NULL_IF_CONFIG_SMALL("Huffyuv / HuffYUV"),
 };
 #endif
 
 #if CONFIG_FFVHUFF_DECODER
 AVCodec ff_ffvhuff_decoder = {
-    .name             = "ffvhuff",
-    .type             = AVMEDIA_TYPE_VIDEO,
-    .id               = CODEC_ID_FFVHUFF,
-    .priv_data_size   = sizeof(HYuvContext),
-    .init             = decode_init,
-    .close            = decode_end,
-    .decode           = decode_frame,
-    .capabilities     = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND |
-                        CODEC_CAP_FRAME_THREADS,
+    .name           = "ffvhuff",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_FFVHUFF,
+    .priv_data_size = sizeof(HYuvContext),
+    .init           = decode_init,
+    .close          = decode_end,
+    .decode         = decode_frame,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_FRAME_THREADS,
     .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy),
-    .long_name        = NULL_IF_CONFIG_SMALL("Huffyuv FFmpeg variant"),
+    .long_name = NULL_IF_CONFIG_SMALL("Huffyuv FFmpeg variant"),
 };
 #endif
 
@@ -1548,12 +1565,10 @@ AVCodec ff_huffyuv_encoder = {
     .id             = CODEC_ID_HUFFYUV,
     .priv_data_size = sizeof(HYuvContext),
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = encode_end,
-    .pix_fmts       = (const enum PixelFormat[]){
-        PIX_FMT_YUV422P, PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_NONE
-    },
-    .long_name      = NULL_IF_CONFIG_SMALL("Huffyuv / HuffYUV"),
+    .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV422P, PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_NONE},
+    .long_name = NULL_IF_CONFIG_SMALL("Huffyuv / HuffYUV"),
 };
 #endif
 
@@ -1564,11 +1579,9 @@ AVCodec ff_ffvhuff_encoder = {
     .id             = CODEC_ID_FFVHUFF,
     .priv_data_size = sizeof(HYuvContext),
     .init           = encode_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = encode_end,
-    .pix_fmts       = (const enum PixelFormat[]){
-        PIX_FMT_YUV420P, PIX_FMT_YUV422P, PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_NONE
-    },
-    .long_name      = NULL_IF_CONFIG_SMALL("Huffyuv FFmpeg variant"),
+    .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV420P, PIX_FMT_YUV422P, PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_NONE},
+    .long_name = NULL_IF_CONFIG_SMALL("Huffyuv FFmpeg variant"),
 };
 #endif

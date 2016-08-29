@@ -202,8 +202,6 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_R210,         MKTAG('r', '2', '1', '0') },
     { CODEC_ID_V210,         MKTAG('v', '2', '1', '0') },
     { CODEC_ID_V308,         MKTAG('v', '3', '0', '8') },
-    { CODEC_ID_V408,         MKTAG('v', '4', '0', '8') },
-    { CODEC_ID_AYUV,         MKTAG('A', 'Y', 'U', 'V') },
     { CODEC_ID_V410,         MKTAG('v', '4', '1', '0') },
     { CODEC_ID_YUV4,         MKTAG('y', 'u', 'v', '4') },
     { CODEC_ID_INDEO3,       MKTAG('I', 'V', '3', '1') },
@@ -271,7 +269,6 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_JPEG2000,     MKTAG('M', 'J', '2', 'C') },
     { CODEC_ID_JPEG2000,     MKTAG('L', 'J', '2', 'C') },
     { CODEC_ID_JPEG2000,     MKTAG('L', 'J', '2', 'K') },
-    { CODEC_ID_JPEG2000,     MKTAG('I', 'P', 'J', '2') },
     { CODEC_ID_VMNC,         MKTAG('V', 'M', 'n', 'c') },
     { CODEC_ID_TARGA,        MKTAG('t', 'g', 'a', ' ') },
     { CODEC_ID_PNG,          MKTAG('M', 'P', 'N', 'G') },
@@ -298,10 +295,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_VBLE,         MKTAG('V', 'B', 'L', 'E') },
     { CODEC_ID_ESCAPE130,    MKTAG('E', '1', '3', '0') },
     { CODEC_ID_DXTORY,       MKTAG('x', 't', 'o', 'r') },
-    { CODEC_ID_ZEROCODEC,    MKTAG('Z', 'E', 'C', 'O') },
     { CODEC_ID_Y41P,         MKTAG('Y', '4', '1', 'P') },
-    { CODEC_ID_FLIC,         MKTAG('A', 'F', 'L', 'C') },
-    { CODEC_ID_EXR,          MKTAG('e', 'x', 'r', ' ') },
     { CODEC_ID_NONE,         0 }
 };
 
@@ -417,7 +411,7 @@ void ff_end_tag(AVIOContext *pb, int64_t start)
 /* returns the size or -1 on error */
 int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
 {
-    int bps, blkalign, bytespersec, frame_size;
+    int bps, blkalign, bytespersec;
     int hdrsize = 18;
     int waveformatextensible;
     uint8_t temp[256];
@@ -426,14 +420,6 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
 
     if(!enc->codec_tag || enc->codec_tag > 0xffff)
         return -1;
-
-    /* We use the known constant frame size for the codec if known, otherwise
-       fallback to using AVCodecContext.frame_size, which is not as reliable
-       for indicating packet duration */
-    frame_size = av_get_audio_frame_duration(enc, 0);
-    if (!frame_size)
-        frame_size = enc->frame_size;
-
     waveformatextensible =   (enc->channels > 2 && enc->channel_layout)
                           || enc->sample_rate > 48000
                           || av_get_bits_per_sample(enc->codec_id) > 16;
@@ -460,9 +446,7 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
     }
 
     if (enc->codec_id == CODEC_ID_MP2 || enc->codec_id == CODEC_ID_MP3) {
-        /* this is wrong, but it seems many demuxers do not work if this is set
-           correctly */
-        blkalign = frame_size;
+        blkalign = enc->frame_size; //this is wrong, but it seems many demuxers do not work if this is set correctly
         //blkalign = 144 * enc->bit_rate/enc->sample_rate;
     } else if (enc->codec_id == CODEC_ID_AC3) {
             blkalign = 3840; //maximum bytes per frame
@@ -502,7 +486,7 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
         bytestream_put_le32(&riff_extradata, 0);                          /* dwPTSHigh */
     } else if (enc->codec_id == CODEC_ID_GSM_MS || enc->codec_id == CODEC_ID_ADPCM_IMA_WAV) {
         hdrsize += 2;
-        bytestream_put_le16(&riff_extradata, frame_size); /* wSamplesPerBlock */
+        bytestream_put_le16(&riff_extradata, enc->frame_size); /* wSamplesPerBlock */
     } else if(enc->extradata_size){
         riff_extradata_start= enc->extradata;
         riff_extradata= enc->extradata + enc->extradata_size;
@@ -616,6 +600,11 @@ int ff_get_wav_header(AVIOContext *pb, AVCodecContext *codec, int size)
         if (size > 0)
             avio_skip(pb, size);
     }
+    if (codec->sample_rate <= 0) {
+        av_log(NULL, AV_LOG_ERROR,
+               "Invalid sample rate: %d\n", codec->sample_rate);
+        return AVERROR_INVALIDDATA;
+    }
     if (codec->codec_id == CODEC_ID_AAC_LATM) {
         /* channels and sample_rate values are those prior to applying SBR and/or PS */
         codec->channels    = 0;
@@ -670,18 +659,10 @@ int ff_get_bmp_header(AVIOContext *pb, AVStream *st)
 void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssize, int *au_scale)
 {
     int gcd;
-    int audio_frame_size;
-
-    /* We use the known constant frame size for the codec if known, otherwise
-       fallback to using AVCodecContext.frame_size, which is not as reliable
-       for indicating packet duration */
-    audio_frame_size = av_get_audio_frame_duration(stream, 0);
-    if (!audio_frame_size)
-        audio_frame_size = stream->frame_size;
 
     *au_ssize= stream->block_align;
-    if (audio_frame_size && stream->sample_rate) {
-        *au_scale = audio_frame_size;
+    if(stream->frame_size && stream->sample_rate){
+        *au_scale=stream->frame_size;
         *au_rate= stream->sample_rate;
     }else if(stream->codec_type == AVMEDIA_TYPE_VIDEO ||
              stream->codec_type == AVMEDIA_TYPE_DATA ||
@@ -731,8 +712,13 @@ int ff_read_riff_info(AVFormatContext *s, int64_t size)
         chunk_code = avio_rl32(pb);
         chunk_size = avio_rl32(pb);
         if (chunk_size > end || end - chunk_size < cur || chunk_size == UINT_MAX) {
-            av_log(s, AV_LOG_ERROR, "too big INFO subchunk\n");
-            return AVERROR_INVALIDDATA;
+            avio_seek(pb, -9, SEEK_CUR);
+            chunk_code = avio_rl32(pb);
+            chunk_size = avio_rl32(pb);
+            if (chunk_size > end || end - chunk_size < cur || chunk_size == UINT_MAX) {
+                av_log(s, AV_LOG_ERROR, "too big INFO subchunk\n");
+                return AVERROR_INVALIDDATA;
+            }
         }
 
         chunk_size += (chunk_size & 1);

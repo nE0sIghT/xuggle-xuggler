@@ -24,27 +24,14 @@
 #include <string.h>
 
 #include "libavutil/audioconvert.h"
+#include "libavutil/avstring.h"
 #include "avfilter.h"
 #include "avfiltergraph.h"
 #include "internal.h"
 
-#include "libavutil/log.h"
-
-static const AVClass filtergraph_class = {
-    .class_name = "AVFilterGraph",
-    .item_name  = av_default_item_name,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
 AVFilterGraph *avfilter_graph_alloc(void)
 {
-    AVFilterGraph *ret = av_mallocz(sizeof(AVFilterGraph));
-    if (!ret)
-        return NULL;
-#if FF_API_GRAPH_AVCLASS
-    ret->av_class = &filtergraph_class;
-#endif
-    return ret;
+    return av_mallocz(sizeof(AVFilterGraph));
 }
 
 void avfilter_graph_free(AVFilterGraph **graph)
@@ -201,7 +188,6 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     int i, j, ret;
     char filt_args[128];
-    AVFilterFormats *formats, *chlayouts, *packing;
 
     /* ask all the sub-filters for their supported media formats */
     for (i = 0; i < graph->filter_count; i++) {
@@ -217,6 +203,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 
         for (j = 0; j < filter->input_count; j++) {
             AVFilterLink *link = filter->inputs[j];
+
             if (!link) continue;
 
             if (!link->in_formats || !link->out_formats)
@@ -226,8 +213,12 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                 !avfilter_merge_formats(link->in_formats, link->out_formats)) {
 
                 /* couldn't merge format lists, auto-insert scale filter */
-                snprintf(filt_args, sizeof(filt_args), "0:0:%s",
-                         graph->scale_sws_opts);
+                av_strlcpy(filt_args, "0:0", sizeof(filt_args));
+                if (graph->scale_sws_opts) {
+                    av_strlcat(filt_args, ":", sizeof(filt_args));
+                    av_strlcat(filt_args, graph->scale_sws_opts, sizeof(filt_args));
+                }
+
                 if (ret = insert_conv_filter(graph, link, "scale", filt_args))
                     return ret;
             }
@@ -236,13 +227,9 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                     !link->in_packing   || !link->out_packing)
                     return AVERROR(EINVAL);
 
-                /* Merge all three list before checking: that way, in all
-                 * three categories, aconvert will use a common format
-                 * whenever possible. */
-                formats   = avfilter_merge_formats(link->in_formats,   link->out_formats);
-                chlayouts = avfilter_merge_formats(link->in_chlayouts, link->out_chlayouts);
-                packing   = avfilter_merge_formats(link->in_packing,   link->out_packing);
-                if (!formats || !chlayouts || !packing)
+                if (!avfilter_merge_formats(link->in_formats,   link->out_formats)   ||
+                    !avfilter_merge_formats(link->in_chlayouts, link->out_chlayouts) ||
+                    !avfilter_merge_formats(link->in_packing,   link->out_packing))
                     if (ret = insert_conv_filter(graph, link, "aconvert", NULL))
                        return ret;
             }
@@ -275,49 +262,6 @@ static void pick_format(AVFilterLink *link)
     }
 }
 
-static int reduce_formats_on_filter(AVFilterContext *filter)
-{
-    int i, j, k, ret = 0;
-
-    for (i = 0; i < filter->input_count; i++) {
-        AVFilterLink *link = filter->inputs[i];
-        int         format = link->out_formats->formats[0];
-
-        if (link->out_formats->format_count != 1)
-            continue;
-
-        for (j = 0; j < filter->output_count; j++) {
-            AVFilterLink *out_link = filter->outputs[j];
-            AVFilterFormats  *fmts = out_link->in_formats;
-
-            if (link->type != out_link->type ||
-                out_link->in_formats->format_count == 1)
-                continue;
-
-            for (k = 0; k < out_link->in_formats->format_count; k++)
-                if (fmts->formats[k] == format) {
-                    fmts->formats[0]   = format;
-                    fmts->format_count = 1;
-                    ret = 1;
-                    break;
-                }
-        }
-    }
-    return ret;
-}
-
-static void reduce_formats(AVFilterGraph *graph)
-{
-    int i, reduced;
-
-    do {
-        reduced = 0;
-
-        for (i = 0; i < graph->filter_count; i++)
-            reduced |= reduce_formats_on_filter(graph->filters[i]);
-    } while (reduced);
-}
-
 static void pick_formats(AVFilterGraph *graph)
 {
     int i, j;
@@ -341,10 +285,7 @@ int ff_avfilter_graph_config_formats(AVFilterGraph *graph, AVClass *log_ctx)
         return ret;
 
     /* Once everything is merged, it's possible that we'll still have
-     * multiple valid media format choices. We try to minimize the amount
-     * of format conversion inside filters */
-    reduce_formats(graph);
-
+     * multiple valid media format choices. We pick the first one. */
     pick_formats(graph);
 
     return 0;

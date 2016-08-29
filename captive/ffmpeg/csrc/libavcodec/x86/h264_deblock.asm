@@ -200,7 +200,7 @@ cextern pb_A1
 ; out: %4 = |%1-%2|>%3
 ; clobbers: %5
 %macro DIFF_GT2 5
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     psubusb %5, %2, %1
     psubusb %4, %1, %2
 %else
@@ -278,7 +278,7 @@ cextern pb_A1
     mova    %4, %2
 %endmacro
 
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
 ;-----------------------------------------------------------------------------
 ; void deblock_v_luma( uint8_t *pix, int stride, int alpha, int beta, int8_t *tc0 )
 ;-----------------------------------------------------------------------------
@@ -333,7 +333,7 @@ cglobal deblock_h_luma_8_%1, 5,7
     lea    r11, [r10+r10*2]
     lea    r6,  [r0-4]
     lea    r5,  [r0-4+r11]
-%if WIN64
+%ifdef WIN64
     sub    rsp, 0x98
     %define pix_tmp rsp+0x30
 %else
@@ -352,7 +352,7 @@ cglobal deblock_h_luma_8_%1, 5,7
     ; don't backup r6, r5, r10, r11 because deblock_v_luma_sse2 doesn't use them
     lea    r0, [pix_tmp+0x30]
     mov    r1d, 0x10
-%if WIN64
+%ifdef WIN64
     mov    [rsp+0x20], r4
 %endif
     call   deblock_v_luma_8_%1
@@ -376,7 +376,7 @@ cglobal deblock_h_luma_8_%1, 5,7
     movq   m3, [pix_tmp+0x40]
     TRANSPOSE8x4B_STORE  PASS8ROWS(r6, r5, r10, r11)
 
-%if WIN64
+%ifdef WIN64
     add    rsp, 0x98
 %else
     add    rsp, 0x68
@@ -386,7 +386,7 @@ cglobal deblock_h_luma_8_%1, 5,7
 
 INIT_XMM
 DEBLOCK_LUMA sse2
-%if HAVE_AVX
+%ifdef HAVE_AVX
 INIT_AVX
 DEBLOCK_LUMA avx
 %endif
@@ -507,7 +507,7 @@ INIT_MMX
 DEBLOCK_LUMA mmxext, v8, 8
 INIT_XMM
 DEBLOCK_LUMA sse2, v, 16
-%if HAVE_AVX
+%ifdef HAVE_AVX
 INIT_AVX
 DEBLOCK_LUMA avx, v, 16
 %endif
@@ -517,7 +517,7 @@ DEBLOCK_LUMA avx, v, 16
 
 
 %macro LUMA_INTRA_P012 4 ; p0..p3 in memory
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     pavgb t0, p2, p1
     pavgb t1, p0, q0
 %else
@@ -528,7 +528,7 @@ DEBLOCK_LUMA avx, v, 16
 %endif
     pavgb t0, t1 ; ((p2+p1+1)/2 + (p0+q0+1)/2 + 1)/2
     mova  t5, t1
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     paddb t2, p2, p1
     paddb t3, p0, q0
 %else
@@ -546,7 +546,7 @@ DEBLOCK_LUMA avx, v, 16
     pand  t2, mpb_1
     psubb t0, t2 ; p1' = (p2+p1+p0+q0+2)/4;
 
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     pavgb t1, p2, q1
     psubb t2, p2, q1
 %else
@@ -621,7 +621,7 @@ DEBLOCK_LUMA avx, v, 16
     %define t1 m5
     %define t2 m6
     %define t3 m7
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     %define p2 m8
     %define q2 m9
     %define t4 m10
@@ -648,7 +648,7 @@ DEBLOCK_LUMA avx, v, 16
 ; void deblock_v_luma_intra( uint8_t *pix, int stride, int alpha, int beta )
 ;-----------------------------------------------------------------------------
 cglobal deblock_%2_luma_intra_8_%1, 4,6,16
-%if ARCH_X86_64 == 0
+%ifndef ARCH_X86_64
     sub     esp, 0x60
 %endif
     lea     r4, [r1*4]
@@ -663,7 +663,7 @@ cglobal deblock_%2_luma_intra_8_%1, 4,6,16
     mova    p0, [r4+r5]
     mova    q0, [r0]
     mova    q1, [r0+r1]
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     pxor    mpb_0, mpb_0
     mova    mpb_1, [pb_1]
     LOAD_MASK r2d, r3d, t5 ; m5=beta-1, t5=alpha-1, m7=mask0
@@ -699,13 +699,13 @@ cglobal deblock_%2_luma_intra_8_%1, 4,6,16
     LUMA_INTRA_SWAP_PQ
     LUMA_INTRA_P012 [r0], [r0+r1], [r0+2*r1], [r0+r5]
 .end:
-%if ARCH_X86_64 == 0
+%ifndef ARCH_X86_64
     add     esp, 0x60
 %endif
     RET
 
 INIT_MMX
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
 ;-----------------------------------------------------------------------------
 ; void deblock_h_luma_intra( uint8_t *pix, int stride, int alpha, int beta )
 ;-----------------------------------------------------------------------------
@@ -781,11 +781,11 @@ cglobal deblock_h_luma_intra_8_%1, 2,4
 
 INIT_XMM
 DEBLOCK_LUMA_INTRA sse2, v
-%if HAVE_AVX
+%ifdef HAVE_AVX
 INIT_AVX
 DEBLOCK_LUMA_INTRA avx , v
 %endif
-%if ARCH_X86_64 == 0
+%ifndef ARCH_X86_64
 INIT_MMX
 DEBLOCK_LUMA_INTRA mmxext, v8
 %endif
@@ -830,13 +830,9 @@ cglobal deblock_v_chroma_8_mmxext, 5,6
 ; void ff_deblock_h_chroma( uint8_t *pix, int stride, int alpha, int beta, int8_t *tc0 )
 ;-----------------------------------------------------------------------------
 cglobal deblock_h_chroma_8_mmxext, 5,7
-%if UNIX64
+%ifdef ARCH_X86_64
     %define buf0 [rsp-24]
     %define buf1 [rsp-16]
-%elif WIN64
-    sub   rsp, 16
-    %define buf0 [rsp]
-    %define buf1 [rsp+8]
 %else
     %define buf0 r0m
     %define buf1 r2m
@@ -845,17 +841,10 @@ cglobal deblock_h_chroma_8_mmxext, 5,7
     TRANSPOSE4x8_LOAD  bw, wd, dq, PASS8ROWS(t5, r0, r1, t6)
     movq  buf0, m0
     movq  buf1, m3
-    LOAD_MASK  r2d, r3d
-    movd       m6, [r4] ; tc0
-    punpcklbw  m6, m6
-    pand       m7, m6
-    DEBLOCK_P0_Q0
+    call ff_chroma_inter_body_mmxext
     movq  m0, buf0
     movq  m3, buf1
     TRANSPOSE8x4B_STORE PASS8ROWS(t5, r0, r1, t6)
-%if WIN64
-    add   rsp, 16
-%endif
     RET
 
 ALIGN 16

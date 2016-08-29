@@ -26,6 +26,7 @@
 
 #include "libavutil/lfg.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "cga_data.h"
 
 #define ATTR_BOLD         0x01  /**< Bold/Bright-foreground (mode 1) */
@@ -182,8 +183,6 @@ static int execute_code(AVCodecContext * avctx, int c)
     case 'l': //reset screen mode
         if (s->nb_args < 2)
             s->args[0] = DEFAULT_SCREEN_MODE;
-        width = avctx->width;
-        height = avctx->height;
         switch(s->args[0]) {
         case 0: case 1: case 4: case 5: case 13: case 19: //320x200 (25 rows)
             s->font = ff_cga_font;
@@ -224,7 +223,7 @@ static int execute_code(AVCodecContext * avctx, int c)
             if (s->frame.data[0])
                 avctx->release_buffer(avctx, &s->frame);
             avcodec_set_dimensions(avctx, width, height);
-            ret = avctx->get_buffer(avctx, &s->frame);
+            ret = ff_get_buffer(avctx, &s->frame);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                 return ret;

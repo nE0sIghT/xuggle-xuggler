@@ -27,7 +27,6 @@
 
 #include <float.h>
 #include "avcodec.h"
-#include "internal.h"
 #include "bytestream.h"
 #include "j2k.h"
 #include "libavutil/common.h"
@@ -457,7 +456,7 @@ static void init_quantization(J2kEncoderContext *s)
     }
 }
 
-static void init_luts(void)
+static void init_luts()
 {
     int i, a,
         mask = ~((1<<NMSEDEC_FRACBITS)-1);
@@ -921,20 +920,18 @@ static void reinit(J2kEncoderContext *s)
     }
 }
 
-static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                        const AVFrame *pict, int *got_packet)
+static int encode_frame(AVCodecContext *avctx,
+                        uint8_t *buf, int buf_size,
+                        void *data)
 {
     int tileno, ret;
     J2kEncoderContext *s = avctx->priv_data;
 
-    if ((ret = ff_alloc_packet2(avctx, pkt, avctx->width*avctx->height*9 + FF_MIN_BUFFER_SIZE)) < 0)
-        return ret;
-
     // init:
-    s->buf = s->buf_start = pkt->data;
-    s->buf_end = pkt->data + pkt->size;
+    s->buf = s->buf_start = buf;
+    s->buf_end = buf + buf_size;
 
-    s->picture = *pict;
+    s->picture = *(AVFrame*)data;
     avctx->coded_frame= &s->picture;
 
     s->lambda = s->picture.quality * LAMBDA_SCALE;
@@ -968,11 +965,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     bytestream_put_be16(&s->buf, J2K_EOC);
 
     av_log(s->avctx, AV_LOG_DEBUG, "end\n");
-    pkt->size = s->buf - s->buf_start;
-    pkt->flags |= AV_PKT_FLAG_KEY;
-    *got_packet = 1;
-
-    return 0;
+    return s->buf - s->buf_start;
 }
 
 static av_cold int j2kenc_init(AVCodecContext *avctx)
@@ -1048,13 +1041,14 @@ AVCodec ff_jpeg2000_encoder = {
     .id             = CODEC_ID_JPEG2000,
     .priv_data_size = sizeof(J2kEncoderContext),
     .init           = j2kenc_init,
-    .encode2        = encode_frame,
+    .encode         = encode_frame,
     .close          = j2kenc_destroy,
-    .capabilities   = CODEC_CAP_EXPERIMENTAL,
-    .long_name      = NULL_IF_CONFIG_SMALL("JPEG 2000"),
-    .pix_fmts       = (const enum PixelFormat[]) { PIX_FMT_RGB24, PIX_FMT_YUV444P, PIX_FMT_GRAY8,
-/*                                                 PIX_FMT_YUV420P,
-                                                   PIX_FMT_YUV422P, PIX_FMT_YUV444P,
-                                                   PIX_FMT_YUV410P, PIX_FMT_YUV411P,*/
-                                                   PIX_FMT_NONE }
+    .capabilities= CODEC_CAP_EXPERIMENTAL,
+    .long_name = NULL_IF_CONFIG_SMALL("JPEG 2000"),
+    .pix_fmts =
+        (const enum PixelFormat[]) {PIX_FMT_RGB24, PIX_FMT_YUV444P, PIX_FMT_GRAY8,
+/*                              PIX_FMT_YUV420P,
+                              PIX_FMT_YUV422P, PIX_FMT_YUV444P,
+                              PIX_FMT_YUV410P, PIX_FMT_YUV411P,*/
+                              -1}
 };

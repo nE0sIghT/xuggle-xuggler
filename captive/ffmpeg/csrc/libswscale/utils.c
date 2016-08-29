@@ -111,11 +111,10 @@ static const FormatEntry format_entries[PIX_FMT_NB] = {
     [PIX_FMT_YUV440P]     = { 1 , 1 },
     [PIX_FMT_YUVJ440P]    = { 1 , 1 },
     [PIX_FMT_YUVA420P]    = { 1 , 1 },
-    [PIX_FMT_YUVA444P]    = { 1 , 1 },
     [PIX_FMT_RGB48BE]     = { 1 , 1 },
     [PIX_FMT_RGB48LE]     = { 1 , 1 },
-    [PIX_FMT_RGBA64BE]    = { 1 , 0 },
-    [PIX_FMT_RGBA64LE]    = { 1 , 0 },
+    [PIX_FMT_RGBA64BE]    = { 0 , 0 },
+    [PIX_FMT_RGBA64LE]    = { 0 , 0 },
     [PIX_FMT_RGB565BE]    = { 1 , 1 },
     [PIX_FMT_RGB565LE]    = { 1 , 1 },
     [PIX_FMT_RGB555BE]    = { 1 , 1 },
@@ -151,6 +150,7 @@ static const FormatEntry format_entries[PIX_FMT_NB] = {
     [PIX_FMT_YUV444P9LE]  = { 1 , 1 },
     [PIX_FMT_YUV444P10BE] = { 1 , 1 },
     [PIX_FMT_YUV444P10LE] = { 1 , 1 },
+    [PIX_FMT_GBR24P]      = { 1 , 0 },
     [PIX_FMT_GBRP]        = { 1 , 0 },
     [PIX_FMT_GBRP9LE]     = { 1 , 0 },
     [PIX_FMT_GBRP9BE]     = { 1 , 0 },
@@ -274,14 +274,13 @@ static int initFilter(int16_t **outFilter, int32_t **filterPos, int *outFilterSi
         if (xInc <= 1<<16)      filterSize= 1 + sizeFactor; // upscale
         else                    filterSize= 1 + (sizeFactor*srcW + dstW - 1)/ dstW;
 
-        filterSize = FFMIN(filterSize, srcW - 2);
-        filterSize = FFMAX(filterSize, 1);
+        filterSize = av_clip(filterSize, 1, srcW - 2);
 
         FF_ALLOC_OR_GOTO(NULL, filter, dstW*sizeof(*filter)*filterSize, fail);
 
         xDstInSrc= xInc - 0x10000;
         for (i=0; i<dstW; i++) {
-            int xx= (xDstInSrc - ((filterSize-2)<<16)) / (1<<17);
+            int xx = (xDstInSrc - ((int64_t)(filterSize - 2) << 16)) / (1 << 17);
             int j;
             (*filterPos)[i]= xx;
             for (j=0; j<filterSize; j++) {
@@ -859,30 +858,15 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
     getSubSampleFactors(&c->chrSrcHSubSample, &c->chrSrcVSubSample, srcFormat);
     getSubSampleFactors(&c->chrDstHSubSample, &c->chrDstVSubSample, dstFormat);
 
-
+    // reuse chroma for 2 pixels RGB/BGR unless user wants full chroma interpolation
     if (isAnyRGB(dstFormat) && !(flags&SWS_FULL_CHR_H_INT)) {
         if (dstW&1) {
             av_log(c, AV_LOG_DEBUG, "Forcing full internal H chroma due to odd output size\n");
             flags |= SWS_FULL_CHR_H_INT;
             c->flags = flags;
-        }
+        } else
+            c->chrDstHSubSample = 1;
     }
-    // reuse chroma for 2 pixels RGB/BGR unless user wants full chroma interpolation
-    if (flags & SWS_FULL_CHR_H_INT &&
-        isAnyRGB(dstFormat)       &&
-        dstFormat != PIX_FMT_RGBA &&
-        dstFormat != PIX_FMT_ARGB &&
-        dstFormat != PIX_FMT_BGRA &&
-        dstFormat != PIX_FMT_ABGR &&
-        dstFormat != PIX_FMT_RGB24 &&
-        dstFormat != PIX_FMT_BGR24) {
-        av_log(c, AV_LOG_WARNING,
-               "full chroma interpolation for destination format '%s' not yet implemented\n",
-               sws_format_name(dstFormat));
-        flags &= ~SWS_FULL_CHR_H_INT;
-        c->flags = flags;
-    }
-    if (isAnyRGB(dstFormat) && !(flags&SWS_FULL_CHR_H_INT)) c->chrDstHSubSample=1;
 
     // drop some chroma lines if the user wants it
     c->vChrDrop= (flags&SWS_SRC_V_CHR_DROP_MASK)>>SWS_SRC_V_CHR_DROP_SHIFT;
@@ -1590,3 +1574,4 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context,
     }
     return context;
 }
+

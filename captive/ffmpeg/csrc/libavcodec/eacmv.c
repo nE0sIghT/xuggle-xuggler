@@ -112,8 +112,8 @@ static void cmv_decode_inter(CmvContext * s, const uint8_t *buf, const uint8_t *
             int yoffset = ((buf[i] >> 4)) - 7;
             if (s->last_frame.data[0])
                 cmv_motcomp(s->frame.data[0], s->frame.linesize[0],
-                          s->last_frame.data[0], s->last_frame.linesize[0],
-                          x*4, y*4, xoffset, yoffset, s->avctx->width, s->avctx->height);
+                            s->last_frame.data[0], s->last_frame.linesize[0],
+                            x*4, y*4, xoffset, yoffset, s->avctx->width, s->avctx->height);
         }
         i++;
     }
@@ -162,11 +162,8 @@ static int cmv_decode_frame(AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
 
     if (AV_RL32(buf)==MVIh_TAG||AV_RB32(buf)==MVIh_TAG) {
-        unsigned size = AV_RL32(buf + 4);
         cmv_process_header(s, buf+EA_PREAMBLE_SIZE, buf_end);
-        if (size > buf_end - buf - EA_PREAMBLE_SIZE)
-            return -1;
-        buf += size;
+        return buf_size;
     }
 
     if (av_image_check_size(s->width, s->height, 0, s->avctx))
@@ -227,5 +224,5 @@ AVCodec ff_eacmv_decoder = {
     .close          = cmv_decode_end,
     .decode         = cmv_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Electronic Arts CMV video"),
+    .long_name = NULL_IF_CONFIG_SMALL("Electronic Arts CMV video"),
 };

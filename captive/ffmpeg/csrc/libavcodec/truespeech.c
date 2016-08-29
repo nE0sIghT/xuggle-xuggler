@@ -21,6 +21,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "dsputil.h"
 #include "get_bits.h"
 
@@ -37,7 +38,7 @@ typedef struct {
     AVFrame frame;
     DSPContext dsp;
     /* input data */
-    DECLARE_ALIGNED(16, uint8_t, buffer)[32];
+    uint8_t buffer[32];
     int16_t vector[8];  ///< input vector: 5/5/4/4/4/3/3/3
     int offset1[2];     ///< 8-bit value, used in one copying offset
     int offset2[4];     ///< 7-bit value, encodes offsets for copying and for two-point filter
@@ -68,7 +69,7 @@ static av_cold int truespeech_decode_init(AVCodecContext * avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
 
-    ff_dsputil_init(&c->dsp, avctx);
+    dsputil_init(&c->dsp, avctx);
 
     avcodec_get_frame_defaults(&c->frame);
     avctx->coded_frame = &c->frame;
@@ -325,7 +326,7 @@ static int truespeech_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     c->frame.nb_samples = iterations * 240;
-    if ((ret = avctx->get_buffer(avctx, &c->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &c->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -365,5 +366,5 @@ AVCodec ff_truespeech_decoder = {
     .init           = truespeech_decode_init,
     .decode         = truespeech_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("DSP Group TrueSpeech"),
+    .long_name = NULL_IF_CONFIG_SMALL("DSP Group TrueSpeech"),
 };

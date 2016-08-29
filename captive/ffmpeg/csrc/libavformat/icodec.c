@@ -49,7 +49,7 @@ static int probe(AVProbeData *p)
     return 0;
 }
 
-static int read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     IcoDemuxContext *ico = s->priv_data;
     AVIOContext *pb = s->pb;

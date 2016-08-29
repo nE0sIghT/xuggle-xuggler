@@ -291,9 +291,9 @@ static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb);
  * @param gb GetBit context initialized from Codec context extra_data
  * @return Status
  */
-int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitContext *gb)
+int vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitContext *gb)
 {
-    av_log(avctx, AV_LOG_DEBUG, "Header: %0X\n", show_bits_long(gb, 32));
+    av_log(avctx, AV_LOG_DEBUG, "Header: %0X\n", show_bits(gb, 32));
     v->profile = get_bits(gb, 2);
     if (v->profile == PROFILE_COMPLEX) {
         av_log(avctx, AV_LOG_WARNING, "WMV3 Complex Profile is not fully supported\n");
@@ -304,8 +304,8 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
         v->zz_4x8 = ff_vc1_adv_progressive_4x8_zz;
         return decode_sequence_header_adv(v, gb);
     } else {
-        v->zz_8x4 = ff_wmv2_scantableA;
-        v->zz_4x8 = ff_wmv2_scantableB;
+        v->zz_8x4 = wmv2_scantableA;
+        v->zz_4x8 = wmv2_scantableB;
         v->res_y411   = get_bits1(gb);
         v->res_sprite = get_bits1(gb);
         if (v->res_y411) {
@@ -525,7 +525,7 @@ static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb)
     return 0;
 }
 
-int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContext *gb)
+int vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContext *gb)
 {
     int i;
 
@@ -535,8 +535,6 @@ int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContex
     v->panscanflag    = get_bits1(gb);
     v->refdist_flag   = get_bits1(gb);
     v->s.loop_filter  = get_bits1(gb);
-    if (v->s.avctx->skip_loop_filter >= AVDISCARD_ALL)
-        v->s.loop_filter = 0;
     v->fastuvmc       = get_bits1(gb);
     v->extended_mv    = get_bits1(gb);
     v->dquant         = get_bits(gb, 2);
@@ -576,10 +574,12 @@ int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContex
     return 0;
 }
 
-int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
+int vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
 {
     int pqindex, lowquant, status;
 
+    v->field_mode = 0;
+    v->fcm = 0;
     if (v->finterpflag)
         v->interpfrm = get_bits1(gb);
     skip_bits(gb, 2); //framecnt unused
@@ -819,14 +819,14 @@ int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
         lutuv[i] = av_clip_uint8((scale * (i - 128) + 128*64 + 32) >> 6);  \
     }
 
-int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
+int vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
 {
     int pqindex, lowquant;
     int status;
     int mbmodetab, imvtab, icbptab, twomvbptab, fourmvbptab; /* useful only for debugging */
     int scale, shift, i; /* for initializing LUT for intensity compensation */
 
-    v->numref=0;
+    v->numref          = 0;
     v->p_frame_skipped = 0;
     if (v->second_field) {
         if(v->fcm!=2 || v->field_mode!=1)
@@ -903,18 +903,20 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     if (v->field_mode) {
         if (!v->refdist_flag)
             v->refdist = 0;
-        else if ((v->s.pict_type != AV_PICTURE_TYPE_B) && (v->s.pict_type != AV_PICTURE_TYPE_BI)) {
-            v->refdist = get_bits(gb, 2);
-            if (v->refdist == 3)
-                v->refdist += get_unary(gb, 0, 16);
-        }
-        if ((v->s.pict_type == AV_PICTURE_TYPE_B) || (v->s.pict_type == AV_PICTURE_TYPE_BI)) {
-            v->bfraction_lut_index = get_vlc2(gb, ff_vc1_bfraction_vlc.table, VC1_BFRACTION_VLC_BITS, 1);
-            v->bfraction           = ff_vc1_bfraction_lut[v->bfraction_lut_index];
-            v->frfd = (v->bfraction * v->refdist) >> 8;
-            v->brfd = v->refdist - v->frfd - 1;
-            if (v->brfd < 0)
-                v->brfd = 0;
+        else {
+            if ((v->s.pict_type != AV_PICTURE_TYPE_B)
+                && (v->s.pict_type != AV_PICTURE_TYPE_BI)) {
+                v->refdist = get_bits(gb, 2);
+                if (v->refdist == 3)
+                    v->refdist += get_unary(gb, 0, 16);
+            } else {
+                v->bfraction_lut_index = get_vlc2(gb, ff_vc1_bfraction_vlc.table, VC1_BFRACTION_VLC_BITS, 1);
+                v->bfraction           = ff_vc1_bfraction_lut[v->bfraction_lut_index];
+                v->frfd = (v->bfraction * v->refdist) >> 8;
+                v->brfd = v->refdist - v->frfd - 1;
+                if (v->brfd < 0)
+                    v->brfd = 0;
+            }
         }
         goto parse_common_info;
     }

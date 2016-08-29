@@ -146,8 +146,6 @@ enum BlockTypes {
  */
 static void init_lengths(BinkContext *c, int width, int bw)
 {
-    width = FFALIGN(width, 8);
-
     c->bundle[BINK_SRC_BLOCK_TYPES].len = av_log2((width >> 3) + 511) + 1;
 
     c->bundle[BINK_SRC_SUB_BLOCK_TYPES].len = av_log2((width >> 4) + 511) + 1;
@@ -169,7 +167,7 @@ static void init_lengths(BinkContext *c, int width, int bw)
  *
  * @param c decoder context
  */
-static av_cold void init_bundles(BinkContext *c)
+static av_cold int init_bundles(BinkContext *c)
 {
     int bw, bh, blocks;
     int i;
@@ -180,8 +178,12 @@ static av_cold void init_bundles(BinkContext *c)
 
     for (i = 0; i < BINKB_NB_SRC; i++) {
         c->bundle[i].data = av_malloc(blocks * 64);
+        if (!c->bundle[i].data)
+            return AVERROR(ENOMEM);
         c->bundle[i].data_end = c->bundle[i].data + blocks * 64;
     }
+
+    return 0;
 }
 
 /**
@@ -233,7 +235,7 @@ static void merge(GetBitContext *gb, uint8_t *dst, uint8_t *src, int size)
  */
 static void read_tree(GetBitContext *gb, Tree *tree)
 {
-    uint8_t tmp1[16] = { 0 }, tmp2[16], *in = tmp1, *out = tmp2;
+    uint8_t tmp1[16], tmp2[16], *in = tmp1, *out = tmp2;
     int i, t, len;
 
     tree->vlc_num = get_bits(gb, 4);
@@ -244,6 +246,7 @@ static void read_tree(GetBitContext *gb, Tree *tree)
     }
     if (get_bits1(gb)) {
         len = get_bits(gb, 3);
+        memset(tmp1, 0, sizeof(tmp1));
         for (i = 0; i <= len; i++) {
             tree->syms[i] = get_bits(gb, 4);
             tmp1[tree->syms[i]] = 1;
@@ -676,6 +679,9 @@ static int read_dct_coeffs(GetBitContext *gb, int32_t block[64], const uint8_t *
         quant_idx = q;
     }
 
+    if (quant_idx >= 16)
+        return AVERROR_INVALIDDATA;
+
     quant = quant_matrices[quant_idx];
 
     block[0] = (block[0] * quant[0]) >> 11;
@@ -858,7 +864,7 @@ static int binkb_decode_plane(BinkContext *c, GetBitContext *gb, int plane_idx,
                 memset(dctblock, 0, sizeof(*dctblock) * 64);
                 dctblock[0] = binkb_get_value(c, BINKB_SRC_INTRA_DC);
                 qp = binkb_get_value(c, BINKB_SRC_INTRA_Q);
-                read_dct_coeffs(gb, dctblock, bink_scan, (const int32_t (*)[64])binkb_intra_quant, qp);
+                read_dct_coeffs(gb, dctblock, bink_scan, binkb_intra_quant, qp);
                 c->bdsp.idct_put(dst, stride, dctblock);
                 break;
             case 3:
@@ -891,7 +897,7 @@ static int binkb_decode_plane(BinkContext *c, GetBitContext *gb, int plane_idx,
                 memset(dctblock, 0, sizeof(*dctblock) * 64);
                 dctblock[0] = binkb_get_value(c, BINKB_SRC_INTER_DC);
                 qp = binkb_get_value(c, BINKB_SRC_INTER_Q);
-                read_dct_coeffs(gb, dctblock, bink_scan, (const int32_t (*)[64])binkb_inter_quant, qp);
+                read_dct_coeffs(gb, dctblock, bink_scan, binkb_inter_quant, qp);
                 c->bdsp.idct_add(dst, stride, dctblock);
                 break;
             case 5:
@@ -1267,7 +1273,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     BinkContext * const c = avctx->priv_data;
     static VLC_TYPE table[16 * 128][2];
     static int binkb_initialised = 0;
-    int i;
+    int i, ret;
     int flags;
 
     c->version = avctx->codec_tag >> 24;
@@ -1299,10 +1305,13 @@ static av_cold int decode_init(AVCodecContext *avctx)
     avctx->pix_fmt = c->has_alpha ? PIX_FMT_YUVA420P : PIX_FMT_YUV420P;
 
     avctx->idct_algo = FF_IDCT_BINK;
-    ff_dsputil_init(&c->dsp, avctx);
+    dsputil_init(&c->dsp, avctx);
     ff_binkdsp_init(&c->bdsp);
 
-    init_bundles(c);
+    if ((ret = init_bundles(c)) < 0) {
+        free_bundles(c);
+        return ret;
+    }
 
     if (c->version == 'b') {
         if (!binkb_initialised) {
@@ -1335,5 +1344,5 @@ AVCodec ff_bink_decoder = {
     .init           = decode_init,
     .close          = decode_end,
     .decode         = decode_frame,
-    .long_name      = NULL_IF_CONFIG_SMALL("Bink video"),
+    .long_name = NULL_IF_CONFIG_SMALL("Bink video"),
 };

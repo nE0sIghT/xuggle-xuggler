@@ -128,15 +128,22 @@ static av_cold int vqa_decode_init(AVCodecContext *avctx)
 
     /* make sure the extradata made it */
     if (s->avctx->extradata_size != VQA_HEADER_SIZE) {
-        av_log(s->avctx, AV_LOG_ERROR, "expected extradata size of %d\n", VQA_HEADER_SIZE);
+        av_log(s->avctx, AV_LOG_ERROR, "  VQA video: expected extradata size of %d\n", VQA_HEADER_SIZE);
         return -1;
     }
 
     /* load up the VQA parameters from the header */
     s->vqa_version = s->avctx->extradata[0];
-    if (s->vqa_version < 1 || s->vqa_version > 3) {
-        av_log(s->avctx, AV_LOG_ERROR, "unsupported version %d\n", s->vqa_version);
-        return -1;
+    switch (s->vqa_version) {
+    case 1:
+    case 2:
+        break;
+    case 3:
+        av_log_missing_feature(avctx, "VQA Version 3", 0);
+        return AVERROR_PATCHWELCOME;
+    default:
+        av_log_missing_feature(avctx, "VQA Version", 1);
+        return AVERROR_PATCHWELCOME;
     }
     s->width = AV_RL16(&s->avctx->extradata[6]);
     s->height = AV_RL16(&s->avctx->extradata[8]);
@@ -155,26 +162,15 @@ static av_cold int vqa_decode_init(AVCodecContext *avctx)
         return -1;
     }
 
+    if (s->width % s->vector_width || s->height % s->vector_height) {
+        av_log(avctx, AV_LOG_ERROR, "Image size not multiple of block size\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     /* allocate codebooks */
     s->codebook_size = MAX_CODEBOOK_SIZE;
     s->codebook = av_malloc(s->codebook_size);
-    if (!s->codebook)
-        goto fail;
     s->next_codebook_buffer = av_malloc(s->codebook_size);
-    if (!s->next_codebook_buffer)
-        goto fail;
-
-    if (s->width % s->vector_width || s->height % s->vector_height) {
-        av_log(avctx, AV_LOG_ERROR, "Picture dimensions are not a multiple of the vector size\n");
-        goto fail;
-    }
-
-    /* allocate decode buffer */
-    s->decode_buffer_size = (s->width / s->vector_width) *
-        (s->height / s->vector_height) * 2;
-    s->decode_buffer = av_malloc(s->decode_buffer_size);
-    if (!s->decode_buffer)
-        goto fail;
 
     /* initialize the solid-color vectors */
     if (s->vector_height == 4) {
@@ -190,15 +186,15 @@ static av_cold int vqa_decode_init(AVCodecContext *avctx)
     }
     s->next_codebook_buffer_index = 0;
 
+    /* allocate decode buffer */
+    s->decode_buffer_size = (s->width / s->vector_width) *
+        (s->height / s->vector_height) * 2;
+    s->decode_buffer = av_malloc(s->decode_buffer_size);
+
     avcodec_get_frame_defaults(&s->frame);
     s->frame.data[0] = NULL;
 
     return 0;
-fail:
-    av_freep(&s->codebook);
-    av_freep(&s->next_codebook_buffer);
-    av_freep(&s->decode_buffer);
-    return AVERROR(ENOMEM);
 }
 
 #define CHECK_COUNT() \
@@ -372,7 +368,7 @@ static int vqa_decode_chunk(VqaContext *s)
             break;
 
         default:
-            av_log(s->avctx, AV_LOG_ERROR, "Found unknown chunk type: %c%c%c%c (%08X)\n",
+            av_log(s->avctx, AV_LOG_ERROR, "  VQA video: Found unknown chunk type: %c%c%c%c (%08X)\n",
             (chunk_type >> 24) & 0xFF,
             (chunk_type >> 16) & 0xFF,
             (chunk_type >>  8) & 0xFF,
@@ -389,7 +385,7 @@ static int vqa_decode_chunk(VqaContext *s)
     if ((cpl0_chunk != -1) && (cplz_chunk != -1)) {
 
         /* a chunk should not have both chunk types */
-        av_log(s->avctx, AV_LOG_ERROR, "problem: found both CPL0 and CPLZ chunks\n");
+        av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: found both CPL0 and CPLZ chunks\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -407,7 +403,7 @@ static int vqa_decode_chunk(VqaContext *s)
         chunk_size = bytestream2_get_be32(&s->gb);
         /* sanity check the palette size */
         if (chunk_size / 3 > 256 || chunk_size > bytestream2_get_bytes_left(&s->gb)) {
-            av_log(s->avctx, AV_LOG_ERROR, "problem: found a palette chunk with %d colors\n",
+            av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: found a palette chunk with %d colors\n",
                 chunk_size / 3);
             return AVERROR_INVALIDDATA;
         }
@@ -425,7 +421,7 @@ static int vqa_decode_chunk(VqaContext *s)
     if ((cbf0_chunk != -1) && (cbfz_chunk != -1)) {
 
         /* a chunk should not have both chunk types */
-        av_log(s->avctx, AV_LOG_ERROR, "problem: found both CBF0 and CBFZ chunks\n");
+        av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: found both CBF0 and CBFZ chunks\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -446,7 +442,7 @@ static int vqa_decode_chunk(VqaContext *s)
         chunk_size = bytestream2_get_be32(&s->gb);
         /* sanity check the full codebook size */
         if (chunk_size > MAX_CODEBOOK_SIZE) {
-            av_log(s->avctx, AV_LOG_ERROR, "problem: CBF0 chunk too large (0x%X bytes)\n",
+            av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: CBF0 chunk too large (0x%X bytes)\n",
                 chunk_size);
             return AVERROR_INVALIDDATA;
         }
@@ -458,7 +454,7 @@ static int vqa_decode_chunk(VqaContext *s)
     if (vptz_chunk == -1) {
 
         /* something is wrong if there is no VPTZ chunk */
-        av_log(s->avctx, AV_LOG_ERROR, "problem: no VPTZ chunk found\n");
+        av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: no VPTZ chunk found\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -529,7 +525,7 @@ static int vqa_decode_chunk(VqaContext *s)
     /* handle partial codebook */
     if ((cbp0_chunk != -1) && (cbpz_chunk != -1)) {
         /* a chunk should not have both chunk types */
-        av_log(s->avctx, AV_LOG_ERROR, "problem: found both CBP0 and CBPZ chunks\n");
+        av_log(s->avctx, AV_LOG_ERROR, "  VQA video: problem: found both CBP0 and CBPZ chunks\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -538,13 +534,19 @@ static int vqa_decode_chunk(VqaContext *s)
         bytestream2_seek(&s->gb, cbp0_chunk, SEEK_SET);
         chunk_size = bytestream2_get_be32(&s->gb);
 
+        if (chunk_size > MAX_CODEBOOK_SIZE - s->next_codebook_buffer_index) {
+            av_log(s->avctx, AV_LOG_ERROR, "cbp0 chunk too large (%u bytes)\n",
+                   chunk_size);
+            return AVERROR_INVALIDDATA;
+        }
+
         /* accumulate partial codebook */
         bytestream2_get_buffer(&s->gb, &s->next_codebook_buffer[s->next_codebook_buffer_index],
                                chunk_size);
         s->next_codebook_buffer_index += chunk_size;
 
         s->partial_countdown--;
-        if (s->partial_countdown <= 0) {
+        if (s->partial_countdown == 0) {
 
             /* time to replace codebook */
             memcpy(s->codebook, s->next_codebook_buffer,
@@ -561,13 +563,19 @@ static int vqa_decode_chunk(VqaContext *s)
         bytestream2_seek(&s->gb, cbpz_chunk, SEEK_SET);
         chunk_size = bytestream2_get_be32(&s->gb);
 
+        if (chunk_size > MAX_CODEBOOK_SIZE - s->next_codebook_buffer_index) {
+            av_log(s->avctx, AV_LOG_ERROR, "cbpz chunk too large (%u bytes)\n",
+                   chunk_size);
+            return AVERROR_INVALIDDATA;
+        }
+
         /* accumulate partial codebook */
         bytestream2_get_buffer(&s->gb, &s->next_codebook_buffer[s->next_codebook_buffer_index],
                                chunk_size);
         s->next_codebook_buffer_index += chunk_size;
 
         s->partial_countdown--;
-        if (s->partial_countdown <= 0) {
+        if (s->partial_countdown == 0) {
             GetByteContext gb;
 
             bytestream2_init(&gb, s->next_codebook_buffer, s->next_codebook_buffer_index);
@@ -619,9 +627,9 @@ static av_cold int vqa_decode_end(AVCodecContext *avctx)
 {
     VqaContext *s = avctx->priv_data;
 
-    av_freep(&s->codebook);
-    av_freep(&s->next_codebook_buffer);
-    av_freep(&s->decode_buffer);
+    av_free(s->codebook);
+    av_free(s->next_codebook_buffer);
+    av_free(s->decode_buffer);
 
     if (s->frame.data[0])
         avctx->release_buffer(avctx, &s->frame);
@@ -638,5 +646,5 @@ AVCodec ff_vqa_decoder = {
     .close          = vqa_decode_end,
     .decode         = vqa_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Westwood Studios VQA (Vector Quantized Animation) video"),
+    .long_name = NULL_IF_CONFIG_SMALL("Westwood Studios VQA (Vector Quantized Animation) video"),
 };

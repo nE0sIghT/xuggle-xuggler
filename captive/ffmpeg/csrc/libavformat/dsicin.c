@@ -92,7 +92,7 @@ static int cin_read_file_header(CinDemuxContext *cin, AVIOContext *pb) {
     return 0;
 }
 
-static int cin_read_header(AVFormatContext *s)
+static int cin_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     int rc;
     CinDemuxContext *cin = s->priv_data;
@@ -152,6 +152,8 @@ static int cin_read_frame_header(CinDemuxContext *cin, AVIOContext *pb) {
         return AVERROR(EIO);
 
     if (avio_rl32(pb) != 0xAA55AA55)
+        return AVERROR_INVALIDDATA;
+    if (hdr->video_frame_size < 0 || hdr->audio_frame_size < 0)
         return AVERROR_INVALIDDATA;
 
     return 0;

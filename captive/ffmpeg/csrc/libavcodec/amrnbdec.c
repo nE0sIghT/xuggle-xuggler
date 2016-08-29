@@ -44,6 +44,8 @@
 #include <math.h>
 
 #include "avcodec.h"
+#include "internal.h"
+#include "get_bits.h"
 #include "libavutil/common.h"
 #include "celp_math.h"
 #include "celp_filters.h"
@@ -188,11 +190,16 @@ static av_cold int amrnb_decode_init(AVCodecContext *avctx)
 static enum Mode unpack_bitstream(AMRContext *p, const uint8_t *buf,
                                   int buf_size)
 {
+    GetBitContext gb;
     enum Mode mode;
 
+    init_get_bits(&gb, buf, buf_size * 8);
+
     // Decode the first octet.
-    mode = buf[0] >> 3 & 0x0F;                      // frame type
-    p->bad_frame_indicator = (buf[0] & 0x4) != 0x4; // quality bit
+    skip_bits(&gb, 1);                        // padding bit
+    mode = get_bits(&gb, 4);                  // frame type
+    p->bad_frame_indicator = !get_bits1(&gb); // quality bit
+    skip_bits(&gb, 2);                        // two padding bits
 
     if (mode >= N_MODES || buf_size < frame_sizes_nb[mode] + 1) {
         return NO_DATA;
@@ -938,7 +945,7 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     p->avframe.nb_samples = AMR_BLOCK_SIZE;
-    if ((ret = avctx->get_buffer(avctx, &p->avframe)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &p->avframe)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -1064,6 +1071,5 @@ AVCodec ff_amrnb_decoder = {
     .decode         = amrnb_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .long_name      = NULL_IF_CONFIG_SMALL("Adaptive Multi-Rate NarrowBand"),
-    .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLT,
-                                                     AV_SAMPLE_FMT_NONE },
+    .sample_fmts    = (const enum AVSampleFormat[]){AV_SAMPLE_FMT_FLT,AV_SAMPLE_FMT_NONE},
 };

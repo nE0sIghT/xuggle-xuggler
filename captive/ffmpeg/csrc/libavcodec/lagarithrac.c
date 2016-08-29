@@ -30,7 +30,7 @@
 #include "get_bits.h"
 #include "lagarithrac.h"
 
-void ff_lag_rac_init(lag_rac *l, GetBitContext *gb, int length)
+void lag_rac_init(lag_rac *l, GetBitContext *gb, int length)
 {
     int i, j, left;
 
@@ -41,7 +41,7 @@ void ff_lag_rac_init(lag_rac *l, GetBitContext *gb, int length)
     left                = get_bits_left(gb) >> 3;
     l->bytestream_start =
     l->bytestream       = gb->buffer + get_bits_count(gb) / 8;
-    l->bytestream_end   = l->bytestream_start + left;
+    l->bytestream_end   = l->bytestream_start + FFMIN(length, left);
 
     l->range        = 0x80;
     l->low          = *l->bytestream >> 1;

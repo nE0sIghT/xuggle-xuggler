@@ -95,7 +95,7 @@ static void svq1_write_header(SVQ1Context *s, int frame_type)
         /* output 5 unknown bits (2 + 2 + 1) */
         put_bits(&s->pb, 5, 2); /* 2 needed by quicktime decoder */
 
-        i= ff_match_2uint16((void*)ff_svq1_frame_size_table, FF_ARRAY_ELEMS(ff_svq1_frame_size_table), s->frame_width, s->frame_height);
+        i= ff_match_2uint16(ff_svq1_frame_size_table, FF_ARRAY_ELEMS(ff_svq1_frame_size_table), s->frame_width, s->frame_height);
         put_bits(&s->pb, 3, i);
 
         if (i == 7)
@@ -472,8 +472,8 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
 {
     SVQ1Context * const s = avctx->priv_data;
 
-    ff_dsputil_init(&s->dsp, avctx);
-    avctx->coded_frame = &s->picture;
+    dsputil_init(&s->dsp, avctx);
+    avctx->coded_frame= (AVFrame*)&s->picture;
 
     s->frame_width = avctx->width;
     s->frame_height = avctx->height;
@@ -486,6 +486,7 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
 
     s->avctx= avctx;
     s->m.avctx= avctx;
+    s->m.picture_structure = PICT_FRAME;
     s->m.me.temp      =
     s->m.me.scratchpad= av_mallocz((avctx->width+64)*2*16*2*sizeof(uint8_t));
     s->m.me.map       = av_mallocz(ME_MAP_SIZE*sizeof(uint32_t));
@@ -497,16 +498,14 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                             const AVFrame *pict, int *got_packet)
+static int svq1_encode_frame(AVCodecContext *avctx, unsigned char *buf,
+    int buf_size, void *data)
 {
     SVQ1Context * const s = avctx->priv_data;
-    AVFrame * const p = &s->picture;
+    AVFrame *pict = data;
+    AVFrame * const p= (AVFrame*)&s->picture;
     AVFrame temp;
-    int i, ret;
-
-    if ((ret = ff_alloc_packet2(avctx, pkt, s->y_block_width*s->y_block_height*MAX_MB_BYTES*3 + FF_MIN_BUFFER_SIZE) < 0))
-        return ret;
+    int i;
 
     if(avctx->pix_fmt != PIX_FMT_YUV410P){
         av_log(avctx, AV_LOG_ERROR, "unsupported pixel format\n");
@@ -514,8 +513,8 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
 
     if(!s->current_picture.data[0]){
-        avctx->get_buffer(avctx, &s->current_picture);
-        avctx->get_buffer(avctx, &s->last_picture);
+        ff_get_buffer(avctx, &s->current_picture);
+        ff_get_buffer(avctx, &s->last_picture);
         s->scratchbuf = av_malloc(s->current_picture.linesize[0] * 16 * 2);
     }
 
@@ -523,7 +522,7 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     s->current_picture= s->last_picture;
     s->last_picture= temp;
 
-    init_put_bits(&s->pb, pkt->data, pkt->size);
+    init_put_bits(&s->pb, buf, buf_size);
 
     *p = *pict;
     p->pict_type = avctx->gop_size && avctx->frame_number % avctx->gop_size ? AV_PICTURE_TYPE_P : AV_PICTURE_TYPE_I;
@@ -544,12 +543,7 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     flush_put_bits(&s->pb);
 
-    pkt->size = put_bits_count(&s->pb) / 8;
-    if (p->pict_type == AV_PICTURE_TYPE_I)
-        pkt->flags |= AV_PKT_FLAG_KEY;
-    *got_packet = 1;
-
-    return 0;
+    return put_bits_count(&s->pb) / 8;
 }
 
 static av_cold int svq1_encode_end(AVCodecContext *avctx)
@@ -585,8 +579,8 @@ AVCodec ff_svq1_encoder = {
     .id             = CODEC_ID_SVQ1,
     .priv_data_size = sizeof(SVQ1Context),
     .init           = svq1_encode_init,
-    .encode2        = svq1_encode_frame,
+    .encode         = svq1_encode_frame,
     .close          = svq1_encode_end,
-    .pix_fmts       = (const enum PixelFormat[]){ PIX_FMT_YUV410P, PIX_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1"),
+    .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV410P, PIX_FMT_NONE},
+    .long_name= NULL_IF_CONFIG_SMALL("Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1"),
 };

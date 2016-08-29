@@ -19,7 +19,7 @@ PROGS      := $(PROGS-yes:%=%$(EXESUF))
 INSTPROGS   = $(PROGS-yes:%=%$(PROGSSUF)$(EXESUF))
 OBJS        = $(PROGS-yes:%=%.o) cmdutils.o
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr base64
-HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
+HOSTPROGS  := $(TESTTOOLS:%=tests/%)
 TOOLS       = qt-faststart trasher
 TOOLS-$(CONFIG_ZLIB) += cws2fws
 
@@ -64,10 +64,9 @@ config.h: .config
 	@-printf '\nWARNING: $(?F) newer than config.h, rerun configure\n\n'
 	@-tput sgr0 2>/dev/null
 
-SUBDIR_VARS := CLEANFILES EXAMPLES FFLIBS HOSTPROGS TESTPROGS TOOLS      \
-               ARCH_HEADERS BUILT_HEADERS SKIPHEADERS                    \
-               ALTIVEC-OBJS ARMV6-OBJS MMX-OBJS NEON-OBJS YASM-OBJS      \
-               OBJS TESTOBJS
+SUBDIR_VARS := OBJS FFLIBS CLEANFILES DIRS TESTPROGS EXAMPLES SKIPHEADERS \
+               ALTIVEC-OBJS MMX-OBJS NEON-OBJS X86-OBJS YASM-OBJS-FFT YASM-OBJS \
+               HOSTPROGS BUILT_HEADERS TESTOBJS ARCH_HEADERS ARMV6-OBJS TOOLS
 
 define RESET
 $(1) :=
@@ -138,7 +137,6 @@ uninstall-data:
 clean::
 	$(RM) $(ALLPROGS) $(ALLPROGS_G)
 	$(RM) $(CLEANSUFFIXES)
-	$(RM) $(TOOLS)
 	$(RM) $(CLEANSUFFIXES:%=tools/%)
 	$(RM) coverage.info
 	$(RM) -r coverage-html
@@ -159,6 +157,8 @@ coverage-html: coverage.info
 	$(Q)genhtml -o $@ $<
 	$(Q)touch $@
 
+check: all alltools checkheaders examples testprogs fate
+
 include $(SRC_PATH)/doc/Makefile
 include $(SRC_PATH)/tests/Makefile
 
@@ -173,5 +173,5 @@ $(sort $(OBJDIRS)):
 # so this saves some time on slow systems.
 .SUFFIXES:
 
-.PHONY: all all-yes alltools *clean config examples install*
+.PHONY: all all-yes alltools check *clean config examples install*
 .PHONY: testprogs uninstall*

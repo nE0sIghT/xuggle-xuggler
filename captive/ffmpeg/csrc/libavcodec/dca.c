@@ -32,6 +32,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/audioconvert.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "dsputil.h"
 #include "fft.h"
 #include "get_bits.h"
@@ -39,7 +40,6 @@
 #include "dcadata.h"
 #include "dcahuff.h"
 #include "dca.h"
-#include "dca_parser.h"
 #include "synth_filter.h"
 #include "dcadsp.h"
 #include "fmtconvert.h"
@@ -578,6 +578,11 @@ static int dca_parse_frame_header(DCAContext *s)
     s->lfe               = get_bits(&s->gb, 2);
     s->predictor_history = get_bits(&s->gb, 1);
 
+    if (s->lfe > 2) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid LFE value: %d\n", s->lfe);
+        return AVERROR_INVALIDDATA;
+    }
+
     /* TODO: check CRC */
     if (s->crc_present)
         s->header_crc    = get_bits(&s->gb, 16);
@@ -805,6 +810,13 @@ static int dca_subframe_header(DCAContext *s, int base_channel, int block_index)
                        "Invalid channel mode %d\n", am);
                 return AVERROR_INVALIDDATA;
             }
+
+            if (s->prim_channels > FF_ARRAY_ELEMS(dca_default_coeffs[0])) {
+                av_log_ask_for_sample(s->avctx, "Downmixing %d channels",
+                                      s->prim_channels);
+                return AVERROR_PATCHWELCOME;
+            }
+
             for (j = base_channel; j < s->prim_channels; j++) {
                 s->downmix_coef[j][0] = dca_default_coeffs[am][j][0];
                 s->downmix_coef[j][1] = dca_default_coeffs[am][j][1];
@@ -833,7 +845,6 @@ static int dca_subframe_header(DCAContext *s, int base_channel, int block_index)
 
     /* Low frequency effect data */
     if (!base_channel && s->lfe) {
-        int quant7;
         /* LFE samples */
         int lfe_samples = 2 * s->lfe * (4 + block_index);
         int lfe_end_sample = 2 * s->lfe * (4 + block_index + s->subsubframes[s->current_subframe]);
@@ -845,12 +856,8 @@ static int dca_subframe_header(DCAContext *s, int base_channel, int block_index)
         }
 
         /* Scale factor index */
-        quant7 = get_bits(&s->gb, 8);
-        if (quant7 > 127) {
-            av_log_ask_for_sample(s->avctx, "LFEScaleIndex larger than 127\n");
-            return AVERROR_INVALIDDATA;
-        }
-        s->lfe_scale_factor = scale_factor_quant7[quant7];
+        skip_bits(&s->gb, 1);
+        s->lfe_scale_factor = scale_factor_quant7[get_bits(&s->gb, 7)];
 
         /* Quantization step size * scale factor */
         lfe_scale = 0.035 * s->lfe_scale_factor;
@@ -1259,6 +1266,7 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
 #endif
         } else {
             av_log(s->avctx, AV_LOG_ERROR, "Didn't get subframe DSYNC\n");
+            return AVERROR_INVALIDDATA;
         }
     }
 
@@ -1379,6 +1387,47 @@ static int dca_decode_block(DCAContext *s, int base_channel, int block_index)
     }
 
     return 0;
+}
+
+/**
+ * Convert bitstream to one representation based on sync marker
+ */
+static int dca_convert_bitstream(const uint8_t *src, int src_size, uint8_t *dst,
+                                 int max_size)
+{
+    uint32_t mrk;
+    int i, tmp;
+    const uint16_t *ssrc = (const uint16_t *) src;
+    uint16_t *sdst = (uint16_t *) dst;
+    PutBitContext pb;
+
+    if ((unsigned) src_size > (unsigned) max_size) {
+//        av_log(NULL, AV_LOG_ERROR, "Input frame size larger than DCA_MAX_FRAME_SIZE!\n");
+//        return -1;
+        src_size = max_size;
+    }
+
+    mrk = AV_RB32(src);
+    switch (mrk) {
+    case DCA_MARKER_RAW_BE:
+        memcpy(dst, src, src_size);
+        return src_size;
+    case DCA_MARKER_RAW_LE:
+        for (i = 0; i < (src_size + 1) >> 1; i++)
+            *sdst++ = av_bswap16(*ssrc++);
+        return src_size;
+    case DCA_MARKER_14B_BE:
+    case DCA_MARKER_14B_LE:
+        init_put_bits(&pb, dst, max_size);
+        for (i = 0; i < (src_size + 1) >> 1; i++, src += 2) {
+            tmp = ((mrk == DCA_MARKER_14B_BE) ? AV_RB16(src) : AV_RL16(src)) & 0x3FFF;
+            put_bits(&pb, 14, tmp);
+        }
+        flush_put_bits(&pb);
+        return (put_bits_count(&pb) + 7) >> 3;
+    default:
+        return AVERROR_INVALIDDATA;
+    }
 }
 
 /**
@@ -1668,8 +1717,8 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
 
     s->xch_present = 0;
 
-    s->dca_buffer_size = ff_dca_convert_bitstream(buf, buf_size, s->dca_buffer,
-                                                  DCA_MAX_FRAME_SIZE + DCA_MAX_EXSS_HEADER_SIZE);
+    s->dca_buffer_size = dca_convert_bitstream(buf, buf_size, s->dca_buffer,
+                                               DCA_MAX_FRAME_SIZE + DCA_MAX_EXSS_HEADER_SIZE);
     if (s->dca_buffer_size == AVERROR_INVALIDDATA) {
         av_log(avctx, AV_LOG_ERROR, "Not a valid DCA frame\n");
         return AVERROR_INVALIDDATA;
@@ -1683,6 +1732,7 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
     //set AVCodec values with parsed data
     avctx->sample_rate = s->sample_rate;
     avctx->bit_rate    = s->bit_rate;
+    avctx->frame_size  = s->sample_blocks * 32;
 
     s->profile = FF_PROFILE_DTS;
 
@@ -1846,7 +1896,7 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = 256 * (s->sample_blocks / 8);
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -1906,7 +1956,7 @@ static av_cold int dca_decode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     dca_init_vlcs();
 
-    ff_dsputil_init(&s->dsp, avctx);
+    dsputil_init(&s->dsp, avctx);
     ff_mdct_init(&s->imdct, 6, 1, 1.0);
     ff_synth_filter_init(&s->synth);
     ff_dcadsp_init(&s->dcadsp);

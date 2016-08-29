@@ -35,15 +35,11 @@
 
 %define program_name ff
 
-%define UNIX64 0
-%define WIN64  0
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     %ifidn __OUTPUT_FORMAT__,win32
-        %define WIN64  1
-    %elifidn __OUTPUT_FORMAT__,win64
-        %define WIN64  1
+        %define WIN64
     %else
-        %define UNIX64 1
+        %define UNIX64
     %endif
 %endif
 
@@ -83,9 +79,9 @@
     %endif
 %endmacro
 
-%if WIN64
+%ifdef WIN64
     %define PIC
-%elif ARCH_X86_64 == 0
+%elifndef ARCH_X86_64
 ; x86_32 doesn't require PIC.
 ; Some distros prefer shared objects to be PIC, but nothing breaks if
 ; the code contains a few textrels, so we'll skip that complexity.
@@ -136,7 +132,7 @@
     %define r%1m %6
     %ifid %6 ; i.e. it's a register
         %define r%1mp %2
-    %elif ARCH_X86_64 ; memory
+    %elifdef ARCH_X86_64 ; memory
         %define r%1mp qword %6
     %else
         %define r%1mp dword %6
@@ -153,7 +149,7 @@
     %define e%1w %1
     %define r%1b %2
     %define e%1b %2
-%if ARCH_X86_64 == 0
+%ifndef ARCH_X86_64
     %define r%1  e%1
 %endif
 %endmacro
@@ -189,7 +185,7 @@ DECLARE_REG_SIZE bp, bpl
 
 DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
 
-%if ARCH_X86_64
+%ifdef ARCH_X86_64
     %define gprsize 8
 %else
     %define gprsize 4
@@ -246,14 +242,11 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
             CAT_UNDEF arg_name %+ %%i, w
             CAT_UNDEF arg_name %+ %%i, b
             CAT_UNDEF arg_name %+ %%i, m
-            CAT_UNDEF arg_name %+ %%i, mp
             CAT_UNDEF arg_name, %%i
             %assign %%i %%i+1
         %endrep
     %endif
 
-    %xdefine %%stack_offset stack_offset
-    %undef stack_offset ; so that the current value of stack_offset doesn't get baked in by xdefine
     %assign %%i 0
     %rep %0
         %xdefine %1q r %+ %%i %+ q
@@ -261,16 +254,14 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
         %xdefine %1w r %+ %%i %+ w
         %xdefine %1b r %+ %%i %+ b
         %xdefine %1m r %+ %%i %+ m
-        %xdefine %1mp r %+ %%i %+ mp
         CAT_XDEFINE arg_name, %%i, %1
         %assign %%i %%i+1
         %rotate 1
     %endrep
-    %xdefine stack_offset %%stack_offset
-    %assign n_arg_names %0
+    %assign n_arg_names %%i
 %endmacro
 
-%if WIN64 ; Windows x64 ;=================================================
+%ifdef WIN64 ; Windows x64 ;=================================================
 
 DECLARE_REG 0, rcx, ecx, cx,  cl,  ecx
 DECLARE_REG 1, rdx, edx, dx,  dl,  edx
@@ -297,11 +288,7 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
         push r5
         %assign stack_offset stack_offset+16
     %endif
-    %if mmsize == 8
-        %assign xmm_regs_used 0
-    %else
-        WIN64_SPILL_XMM %3
-    %endif
+    WIN64_SPILL_XMM %3
     LOAD_IF_USED 4, %1
     LOAD_IF_USED 5, %1
     LOAD_IF_USED 6, %1
@@ -310,6 +297,9 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
 
 %macro WIN64_SPILL_XMM 1
     %assign xmm_regs_used %1
+    %if mmsize == 8
+        %assign xmm_regs_used 0
+    %endif
     ASSERT xmm_regs_used <= 16
     %if xmm_regs_used > 6
         sub rsp, (xmm_regs_used-6)*16+16
@@ -356,7 +346,7 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
     %endif
 %endmacro
 
-%elif ARCH_X86_64 ; *nix x64 ;=============================================
+%elifdef ARCH_X86_64 ; *nix x64 ;=============================================
 
 DECLARE_REG 0, rdi, edi, di,  dil, edi
 DECLARE_REG 1, rsi, esi, si,  sil, esi
@@ -457,7 +447,7 @@ DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
 
 %endif ;======================================================================
 
-%if WIN64 == 0
+%ifndef WIN64
 %macro WIN64_SPILL_XMM 1
 %endmacro
 %macro WIN64_RESTORE_XMM 1
@@ -637,7 +627,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
     %define RESET_MM_PERMUTATION INIT_XMM %1
     %define mmsize 16
     %define num_mmregs 8
-    %if ARCH_X86_64
+    %ifdef ARCH_X86_64
     %define num_mmregs 16
     %endif
     %define mova movdqa
@@ -666,7 +656,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
     %define RESET_MM_PERMUTATION INIT_YMM %1
     %define mmsize 32
     %define num_mmregs 8
-    %if ARCH_X86_64
+    %ifdef ARCH_X86_64
     %define num_mmregs 16
     %endif
     %define mova vmovaps

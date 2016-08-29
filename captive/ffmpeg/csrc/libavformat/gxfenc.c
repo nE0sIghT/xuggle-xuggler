@@ -22,7 +22,7 @@
 #include "libavutil/intfloat.h"
 #include "libavutil/opt.h"
 #include "libavutil/mathematics.h"
-#include "libavutil/timecode.h"
+#include "libavcodec/timecode.h"
 #include "avformat.h"
 #include "internal.h"
 #include "gxf.h"
@@ -421,6 +421,11 @@ static int gxf_write_umf_material_description(AVFormatContext *s)
     uint32_t timecode_in; // timecode at mark in
     uint32_t timecode_out; // timecode at mark out
 
+#if FF_API_TIMESTAMP
+    if (s->timestamp)
+        timestamp = s->timestamp;
+    else
+#endif
     if (t = av_dict_get(s->metadata, "creation_time", NULL, 0))
         timestamp = ff_iso8601_to_unix_time(t->value);
 
@@ -991,11 +996,11 @@ static int gxf_interleave_packet(AVFormatContext *s, AVPacket *out, AVPacket *pk
     if (pkt && s->streams[pkt->stream_index]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
         pkt->duration = 2; // enforce 2 fields
     return ff_audio_rechunk_interleave(s, out, pkt, flush,
-                               ff_interleave_packet_per_dts, gxf_compare_field_nb);
+                               av_interleave_packet_per_dts, gxf_compare_field_nb);
 }
 
 static const AVOption options[] = {
-    { AV_TIMECODE_OPTION(GXFContext, tc.str, AV_OPT_FLAG_ENCODING_PARAM) },
+    { TIMECODE_OPT(GXFContext, AV_OPT_FLAG_ENCODING_PARAM) },
     { NULL }
 };
 

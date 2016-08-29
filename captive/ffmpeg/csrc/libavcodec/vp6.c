@@ -52,7 +52,7 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
     int vrt_shift = 0;
     int sub_version;
     int rows, cols;
-    int res = 1;
+    int res = 0;
     int separated_coeff = buf[0] & 1;
 
     s->framep[VP56_FRAME_CURRENT]->key_frame = !(buf[0] & 0x80);
@@ -61,11 +61,11 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
     if (s->framep[VP56_FRAME_CURRENT]->key_frame) {
         sub_version = buf[1] >> 3;
         if (sub_version > 8)
-            return 0;
+            return AVERROR_INVALIDDATA;
         s->filter_header = buf[1] & 0x06;
         if (buf[1] & 1) {
-            av_log(s->avctx, AV_LOG_ERROR, "interlacing not supported\n");
-            return 0;
+            av_log_missing_feature(s->avctx, "Interlacing", 0);
+            return AVERROR_PATCHWELCOME;
         }
         if (separated_coeff || !s->filter_header) {
             coeff_offset = AV_RB16(buf+2) - 2;
@@ -79,7 +79,7 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
         /* buf[5] is number of displayed macroblock cols */
         if (!rows || !cols) {
             av_log(s->avctx, AV_LOG_ERROR, "Invalid size %dx%d\n", cols << 4, rows << 4);
-            return 0;
+            return AVERROR_INVALIDDATA;
         }
 
         if (!s->macroblocks || /* first frame */
@@ -90,7 +90,7 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
                 s->avctx->width  -= s->avctx->extradata[0] >> 4;
                 s->avctx->height -= s->avctx->extradata[0] & 0x0F;
             }
-            res = 2;
+            res = VP56_SIZE_CHANGE;
         }
 
         ff_vp56_init_range_decoder(c, buf+6, buf_size-6);
@@ -102,7 +102,7 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
         s->sub_version = sub_version;
     } else {
         if (!s->sub_version || !s->avctx->coded_width || !s->avctx->coded_height)
-            return 0;
+            return AVERROR_INVALIDDATA;
 
         if (separated_coeff || !s->filter_header) {
             coeff_offset = AV_RB16(buf+1) - 2;
@@ -146,7 +146,7 @@ static int vp6_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
         if (buf_size < 0) {
             if (s->framep[VP56_FRAME_CURRENT]->key_frame)
                 avcodec_set_dimensions(s->avctx, 0, 0);
-            return 0;
+            return AVERROR_INVALIDDATA;
         }
         if (s->use_huffman) {
             s->parse_coeff = vp6_parse_coeff_huffman;
@@ -182,7 +182,7 @@ static void vp6_default_models_init(VP56Context *s)
     model->vector_sig[0] = 0x80;
     model->vector_sig[1] = 0x80;
 
-    memcpy(model->mb_types_stats, ff_vp56_def_mb_types_stats, sizeof(model->mb_types_stats));
+    memcpy(model->mb_types_stats, vp56_def_mb_types_stats, sizeof(model->mb_types_stats));
     memcpy(model->vector_fdv, vp6_def_fdv_vector_model, sizeof(model->vector_fdv));
     memcpy(model->vector_pdv, vp6_def_pdv_vector_model, sizeof(model->vector_pdv));
     memcpy(model->coeff_runv, vp6_def_runv_coeff_model, sizeof(model->coeff_runv));
@@ -336,7 +336,7 @@ static void vp6_parse_vector_adjustment(VP56Context *s, VP56mv *vect)
             else
                 delta |= 8;
         } else {
-            delta = vp56_rac_get_tree(c, ff_vp56_pva_tree,
+            delta = vp56_rac_get_tree(c, vp56_pva_tree,
                                       model->vector_pdv[comp]);
         }
 
@@ -404,7 +404,7 @@ static void vp6_parse_coeff_huffman(VP56Context *s)
                         s->nb_null[1][pt] = vp6_get_nb_null(s);
                     break;
                 } else {
-                    int coeff2 = ff_vp56_coeff_bias[coeff];
+                    int coeff2 = vp56_coeff_bias[coeff];
                     if (coeff > 4)
                         coeff2 += get_bits(&s->gb, coeff <= 9 ? coeff - 4 : 11);
                     ct = 1 + (coeff2 > 1);
@@ -441,7 +441,7 @@ static void vp6_parse_coeff(VP56Context *s)
 
         if (b > 3) pt = 1;
 
-        ctx = s->left_block[ff_vp56_b6to4[b]].not_null_dc
+        ctx = s->left_block[vp56_b6to4[b]].not_null_dc
               + s->above_blocks[s->above_block_idx[b]].not_null_dc;
         model1 = model->coeff_dccv[pt];
         model2 = model->coeff_dcct[pt][ctx];
@@ -452,10 +452,10 @@ static void vp6_parse_coeff(VP56Context *s)
                 /* parse a coeff */
                 if (vp56_rac_get_prob(c, model2[2])) {
                     if (vp56_rac_get_prob(c, model2[3])) {
-                        idx = vp56_rac_get_tree(c, ff_vp56_pc_tree, model1);
-                        coeff = ff_vp56_coeff_bias[idx+5];
-                        for (i=ff_vp56_coeff_bit_length[idx]; i>=0; i--)
-                            coeff += vp56_rac_get_prob(c, ff_vp56_coeff_parse_table[idx][i]) << i;
+                        idx = vp56_rac_get_tree(c, vp56_pc_tree, model1);
+                        coeff = vp56_coeff_bias[idx+5];
+                        for (i=vp56_coeff_bit_length[idx]; i>=0; i--)
+                            coeff += vp56_rac_get_prob(c, vp56_coeff_parse_table[idx][i]) << i;
                     } else {
                         if (vp56_rac_get_prob(c, model2[4]))
                             coeff = 3 + vp56_rac_get_prob(c, model1[5]);
@@ -495,7 +495,7 @@ static void vp6_parse_coeff(VP56Context *s)
             model1 = model2 = model->coeff_ract[pt][ct][cg];
         }
 
-        s->left_block[ff_vp56_b6to4[b]].not_null_dc =
+        s->left_block[vp56_b6to4[b]].not_null_dc =
         s->above_blocks[s->above_block_idx[b]].not_null_dc = !!s->block_coeff[b][0];
     }
 }
@@ -633,7 +633,7 @@ AVCodec ff_vp6_decoder = {
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("On2 VP6"),
+    .long_name = NULL_IF_CONFIG_SMALL("On2 VP6"),
 };
 
 /* flash version, not flipped upside-down */
@@ -646,7 +646,7 @@ AVCodec ff_vp6f_decoder = {
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("On2 VP6 (Flash version)"),
+    .long_name = NULL_IF_CONFIG_SMALL("On2 VP6 (Flash version)"),
 };
 
 /* flash version, not flipped upside-down, with alpha channel */
@@ -659,5 +659,5 @@ AVCodec ff_vp6a_decoder = {
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("On2 VP6 (Flash version, with alpha channel)"),
+    .long_name = NULL_IF_CONFIG_SMALL("On2 VP6 (Flash version, with alpha channel)"),
 };

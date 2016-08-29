@@ -53,8 +53,7 @@ extern SINETABLE( 512);
 extern SINETABLE(1024);
 extern SINETABLE(2048);
 extern SINETABLE(4096);
-extern SINETABLE(8192);
 
-extern SINETABLE_CONST float * const ff_sine_windows[14];
+extern SINETABLE_CONST float * const ff_sine_windows[13];
 
 #endif /* AVCODEC_SINEWIN_H */

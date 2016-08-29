@@ -66,12 +66,12 @@ const AVCodecTag ff_mp4_obj_type[] = {
     { CODEC_ID_NONE      ,    0 },
 };
 
-const AVCodecTag ff_codec_movvideo_tags[] = {
+const AVCodecTag codec_movvideo_tags[] = {
 /*  { CODEC_ID_, MKTAG('I', 'V', '5', '0') }, *//* Indeo 5.0 */
 
     { CODEC_ID_RAWVIDEO, MKTAG('r', 'a', 'w', ' ') }, /* Uncompressed RGB */
     { CODEC_ID_RAWVIDEO, MKTAG('y', 'u', 'v', '2') }, /* Uncompressed YUV422 */
-    { CODEC_ID_RAWVIDEO, MKTAG('A', 'V', 'U', 'I') }, /* AVID Uncompressed deinterleaved UYVY422 */
+    { CODEC_ID_RAWVIDEO, MKTAG('A', 'V', 'U', 'I') }, /* YUV with alpha-channel (AVID Uncompressed) */
     { CODEC_ID_RAWVIDEO, MKTAG('2', 'v', 'u', 'y') }, /* UNCOMPRESSED 8BIT 4:2:2 */
     { CODEC_ID_RAWVIDEO, MKTAG('y', 'u', 'v', 's') }, /* same as 2vuy but byte swapped */
 
@@ -92,8 +92,7 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
     { CODEC_ID_AVRP,   MKTAG('A', 'V', 'r', 'p') }, /* Avid 1:1 10-bit RGB Packer */
     { CODEC_ID_AVRP,   MKTAG('S', 'U', 'D', 'S') }, /* Avid DS Uncompressed */
     { CODEC_ID_V210,   MKTAG('v', '2', '1', '0') }, /* UNCOMPRESSED 10BIT 4:2:2 */
-    { CODEC_ID_V308,   MKTAG('v', '3', '0', '8') }, /* UNCOMPRESSED  8BIT 4:4:4 */
-    { CODEC_ID_V408,   MKTAG('v', '4', '0', '8') }, /* UNCOMPRESSED  8BIT 4:4:4:4 */
+    { CODEC_ID_V308,   MKTAG('v', '3', '0', '8') }, /* UNCOMPRESSED 4:4:4 */
     { CODEC_ID_V410,   MKTAG('v', '4', '1', '0') }, /* UNCOMPRESSED 10BIT 4:4:4 */
     { CODEC_ID_Y41P,   MKTAG('Y', '4', '1', 'P') }, /* UNCOMPRESSED 12BIT 4:1:1 */
     { CODEC_ID_YUV4,   MKTAG('y', 'u', 'v', '4') }, /* libquicktime packed yuv420p */
@@ -225,19 +224,17 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
     { CODEC_ID_RAWVIDEO, MKTAG('A', 'V', 'u', 'p') },
     { CODEC_ID_SGI,   MKTAG('s', 'g', 'i', ' ') }, /* SGI  */
     { CODEC_ID_DPX,   MKTAG('d', 'p', 'x', ' ') }, /* DPX */
-    { CODEC_ID_EXR,   MKTAG('e', 'x', 'r', ' ') }, /* OpenEXR */
 
     { CODEC_ID_PRORES, MKTAG('a', 'p', 'c', 'h') }, /* Apple ProRes 422 High Quality */
     { CODEC_ID_PRORES, MKTAG('a', 'p', 'c', 'n') }, /* Apple ProRes 422 Standard Definition */
     { CODEC_ID_PRORES, MKTAG('a', 'p', 'c', 's') }, /* Apple ProRes 422 LT */
     { CODEC_ID_PRORES, MKTAG('a', 'p', 'c', 'o') }, /* Apple ProRes 422 Proxy */
     { CODEC_ID_PRORES, MKTAG('a', 'p', '4', 'h') }, /* Apple ProRes 4444 */
-    { CODEC_ID_FLIC,   MKTAG('f', 'l', 'i', 'c') },
 
     { CODEC_ID_NONE, 0 },
 };
 
-const AVCodecTag ff_codec_movaudio_tags[] = {
+const AVCodecTag codec_movaudio_tags[] = {
     { CODEC_ID_AAC,             MKTAG('m', 'p', '4', 'a') },
     { CODEC_ID_AC3,             MKTAG('a', 'c', '-', '3') }, /* ETSI TS 102 366 Annex F */
     { CODEC_ID_AC3,             MKTAG('s', 'a', 'c', '3') }, /* Nero Recode */
@@ -266,6 +263,7 @@ const AVCodecTag ff_codec_movaudio_tags[] = {
     { CODEC_ID_PCM_MULAW,       MKTAG('u', 'l', 'a', 'w') },
     { CODEC_ID_PCM_S16BE,       MKTAG('t', 'w', 'o', 's') },
     { CODEC_ID_PCM_S16LE,       MKTAG('s', 'o', 'w', 't') },
+    { CODEC_ID_PCM_S16BE,       MKTAG('l', 'p', 'c', 'm') },
     { CODEC_ID_PCM_S16LE,       MKTAG('l', 'p', 'c', 'm') },
     { CODEC_ID_PCM_S24BE,       MKTAG('i', 'n', '2', '4') },
     { CODEC_ID_PCM_S24LE,       MKTAG('i', 'n', '2', '4') },
@@ -287,7 +285,6 @@ const AVCodecTag ff_codec_movaudio_tags[] = {
 const AVCodecTag ff_codec_movsubtitle_tags[] = {
     { CODEC_ID_MOV_TEXT, MKTAG('t', 'e', 'x', 't') },
     { CODEC_ID_MOV_TEXT, MKTAG('t', 'x', '3', 'g') },
-    { CODEC_ID_EIA_608,  MKTAG('c', '6', '0', '8') },
     { CODEC_ID_NONE, 0 },
 };
 

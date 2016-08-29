@@ -76,7 +76,7 @@ static av_cold int h261_decode_init(AVCodecContext *avctx){
     MpegEncContext * const s = &h->s;
 
     // set defaults
-    ff_MPV_decode_defaults(s);
+    MPV_decode_defaults(s);
     s->avctx = avctx;
 
     s->width  = s->avctx->coded_width;
@@ -221,7 +221,7 @@ static int h261_decode_mb_skipped(H261Context *h, int mba1, int mba2 )
         s->mb_skipped = 1;
         h->mtype &= ~MB_TYPE_H261_FIL;
 
-        ff_MPV_decode_mb(s, s->block);
+        MPV_decode_mb(s, s->block);
     }
 
     return 0;
@@ -287,7 +287,8 @@ static int h261_decode_mb(H261Context *h){
     // Read mtype
     h->mtype = get_vlc2(&s->gb, h261_mtype_vlc.table, H261_MTYPE_VLC_BITS, 2);
     if (h->mtype < 0) {
-        av_log(s->avctx, AV_LOG_ERROR, "illegal mtype %d\n", h->mtype);
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid mtype index %d\n",
+               h->mtype);
         return SLICE_ERROR;
     }
     h->mtype = h261_mtype_map[h->mtype];
@@ -353,7 +354,7 @@ intra:
             s->block_last_index[i]= -1;
     }
 
-    ff_MPV_decode_mb(s, s->block);
+    MPV_decode_mb(s, s->block);
 
     return SLICE_OK;
 }
@@ -569,7 +570,7 @@ retry:
     init_get_bits(&s->gb, buf, buf_size*8);
 
     if(!s->context_initialized){
-        if (ff_MPV_common_init(s) < 0) //we need the idct permutaton for reading a custom matrix
+        if (MPV_common_init(s) < 0) //we need the idct permutaton for reading a custom matrix
             return -1;
     }
 
@@ -592,7 +593,7 @@ retry:
     if (s->width != avctx->coded_width || s->height != avctx->coded_height){
         ParseContext pc= s->parse_context; //FIXME move this demuxing hack to libavformat
         s->parse_context.buffer=0;
-        ff_MPV_common_end(s);
+        MPV_common_end(s);
         s->parse_context= pc;
     }
     if (!s->context_initialized) {
@@ -610,7 +611,7 @@ retry:
        || avctx->skip_frame >= AVDISCARD_ALL)
         return get_consumed_bytes(s, buf_size);
 
-    if(ff_MPV_frame_start(s, avctx) < 0)
+    if(MPV_frame_start(s, avctx) < 0)
         return -1;
 
     ff_er_frame_start(s);
@@ -624,12 +625,11 @@ retry:
             break;
         h261_decode_gob(h);
     }
-    ff_MPV_frame_end(s);
+    MPV_frame_end(s);
 
 assert(s->current_picture.f.pict_type == s->current_picture_ptr->f.pict_type);
 assert(s->current_picture.f.pict_type == s->pict_type);
-
-    *pict = s->current_picture_ptr->f;
+    *pict= *(AVFrame*)s->current_picture_ptr;
     ff_print_debug_info(s, pict);
 
     *data_size = sizeof(AVFrame);
@@ -642,7 +642,7 @@ static av_cold int h261_decode_end(AVCodecContext *avctx)
     H261Context *h= avctx->priv_data;
     MpegEncContext *s = &h->s;
 
-    ff_MPV_common_end(s);
+    MPV_common_end(s);
     return 0;
 }
 
@@ -655,6 +655,6 @@ AVCodec ff_h261_decoder = {
     .close          = h261_decode_end,
     .decode         = h261_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .max_lowres     = 3,
-    .long_name      = NULL_IF_CONFIG_SMALL("H.261"),
+    .max_lowres = 3,
+    .long_name = NULL_IF_CONFIG_SMALL("H.261"),
 };

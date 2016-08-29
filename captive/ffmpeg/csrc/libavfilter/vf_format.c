@@ -142,3 +142,4 @@ AVFilter avfilter_vf_noformat = {
                                   { .name = NULL}},
 };
 #endif /* CONFIG_NOFORMAT_FILTER */
+

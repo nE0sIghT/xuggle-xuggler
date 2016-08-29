@@ -51,7 +51,7 @@ typedef struct Context {
 
 static int cache_open(URLContext *h, const char *arg, int flags)
 {
-    char *buffername;
+    const char *buffername;
     Context *c= h->priv_data;
 
     av_strstart(arg, "cache:", &arg);

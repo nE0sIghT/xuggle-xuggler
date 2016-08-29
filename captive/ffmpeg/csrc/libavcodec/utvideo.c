@@ -246,6 +246,8 @@ static void restore_median(uint8_t *src, int step, int stride,
     for (slice = 0; slice < slices; slice++) {
         slice_start = ((slice * height) / slices) & cmask;
         slice_height = ((((slice + 1) * height) / slices) & cmask) - slice_start;
+        if (!slice_height)
+            continue;
 
         bsrc = src + slice_start * stride;
 
@@ -301,6 +303,8 @@ static void restore_median_il(uint8_t *src, int step, int stride,
         slice_start    = ((slice * height) / slices) & cmask;
         slice_height   = ((((slice + 1) * height) / slices) & cmask) - slice_start;
         slice_height >>= 1;
+        if (!slice_height)
+            continue;
 
         bsrc = src + slice_start * stride;
 
@@ -374,6 +378,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
+
+    ff_thread_finish_setup(avctx);
 
     /* parse plane structure to retrieve frame flags and validate slice offsets */
     bytestream2_init(&gb, buf, buf_size);
@@ -486,8 +492,6 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         break;
     }
 
-    c->pic.key_frame = 1;
-    c->pic.pict_type = AV_PICTURE_TYPE_I;
     *data_size = sizeof(AVFrame);
     *(AVFrame*)data = c->pic;
 
@@ -501,7 +505,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     c->avctx = avctx;
 
-    ff_dsputil_init(&c->dsp, avctx);
+    dsputil_init(&c->dsp, avctx);
 
     if (avctx->extradata_size < 16) {
         av_log(avctx, AV_LOG_ERROR, "Insufficient extradata size %d, should be at least 16\n",
@@ -574,3 +578,4 @@ AVCodec ff_utvideo_decoder = {
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
     .long_name      = NULL_IF_CONFIG_SMALL("Ut Video"),
 };
+

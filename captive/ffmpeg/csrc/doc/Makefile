@@ -28,30 +28,22 @@ doc/%.txt: doc/%.texi
 	$(Q)$(TEXIDEP)
 	$(M)makeinfo --force --no-headers -o $@ $< 2>/dev/null
 
-doc/print_options.o: libavformat/options_table.h libavcodec/options_table.h
-
-GENTEXI  = format codec
-GENTEXI := $(GENTEXI:%=doc/avoptions_%.texi)
-
-$(GENTEXI): TAG = GENTEXI
-$(GENTEXI): doc/avoptions_%.texi: doc/print_options
-	$(M)doc/print_options $* > $@
-
 doc/%.html: TAG = HTML
-doc/%.html: doc/%.texi $(SRC_PATH)/doc/t2h.init $(GENTEXI)
+doc/%.html: doc/%.texi $(SRC_PATH)/doc/t2h.init
 	$(Q)$(TEXIDEP)
-	$(M)texi2html -I doc -monolithic --init-file $(SRC_PATH)/doc/t2h.init --output $@ $<
+	$(M)texi2html -monolithic --init-file $(SRC_PATH)/doc/t2h.init --output $@ $<
 
 doc/%.pod: TAG = POD
-doc/%.pod: doc/%.texi $(GENTEXI)
+doc/%.pod: doc/%.texi
 	$(Q)$(TEXIDEP)
-	$(M)$(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
+	$(M)$(SRC_PATH)/doc/texi2pod.pl $< $@
 
 doc/%.1: TAG = MAN
-doc/%.1: doc/%.pod $(GENTEXI)
+doc/%.1: doc/%.pod
 	$(M)pod2man --section=1 --center=" " --release=" " $< > $@
 
-$(DOCS): | doc/
+$(DOCS): | doc
+OBJDIRS += doc
 
 install-progs-$(CONFIG_DOC): install-man
 
@@ -65,7 +57,7 @@ uninstall-man:
 	$(RM) $(addprefix "$(MANDIR)/man1/",$(ALLMANPAGES))
 
 clean::
-	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 $(CLEANSUFFIXES:%=doc/%) doc/avoptions_*.texi
+	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 $(CLEANSUFFIXES:%=doc/%)
 
 -include $(wildcard $(DOCS:%=%.d))
 

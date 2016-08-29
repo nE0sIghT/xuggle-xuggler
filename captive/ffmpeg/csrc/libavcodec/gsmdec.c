@@ -25,6 +25,7 @@
  */
 
 #include "avcodec.h"
+#include "internal.h"
 #include "get_bits.h"
 #include "msgsmdec.h"
 
@@ -72,7 +73,7 @@ static int gsm_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = avctx->frame_size;
-    if ((res = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((res = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return res;
     }
@@ -114,7 +115,7 @@ AVCodec ff_gsm_decoder = {
     .decode         = gsm_decode_frame,
     .flush          = gsm_flush,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("GSM"),
+    .long_name = NULL_IF_CONFIG_SMALL("GSM"),
 };
 
 AVCodec ff_gsm_ms_decoder = {
@@ -126,5 +127,5 @@ AVCodec ff_gsm_ms_decoder = {
     .decode         = gsm_decode_frame,
     .flush          = gsm_flush,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("GSM Microsoft variant"),
+    .long_name = NULL_IF_CONFIG_SMALL("GSM Microsoft variant"),
 };

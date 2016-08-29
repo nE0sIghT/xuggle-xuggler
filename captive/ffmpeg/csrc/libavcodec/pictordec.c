@@ -235,6 +235,8 @@ static int decode_frame(AVCodecContext *avctx,
 
                 if (bits_per_plane == 8) {
                     picmemset_8bpp(s, val, run, &x, &y);
+                    if (y < 0)
+                        goto finish;
                 } else {
                     picmemset(s, val, run, &x, &y, &plane, bits_per_plane);
                 }
@@ -247,6 +249,7 @@ static int decode_frame(AVCodecContext *avctx,
             y--;
         }
     }
+finish:
 
     *data_size = sizeof(AVFrame);
     *(AVFrame*)data = s->frame;
@@ -270,5 +273,5 @@ AVCodec ff_pictor_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Pictor/PC Paint"),
+    .long_name = NULL_IF_CONFIG_SMALL("Pictor/PC Paint"),
 };

@@ -27,7 +27,8 @@
 #include "vorbiscomment.h"
 #include "libavcodec/bytestream.h"
 
-static int flac_read_header(AVFormatContext *s)
+static int flac_read_header(AVFormatContext *s,
+                             AVFormatParameters *ap)
 {
     int ret, metadata_last=0, metadata_type, metadata_size, found_streaminfo=0;
     uint8_t header[4];
@@ -142,11 +143,9 @@ static int flac_read_header(AVFormatContext *s)
 
 static int flac_probe(AVProbeData *p)
 {
-    uint8_t *bufptr = p->buf;
-    uint8_t *end    = p->buf + p->buf_size;
-
-    if(bufptr > end-4 || memcmp(bufptr, "fLaC", 4)) return 0;
-    else                                            return AVPROBE_SCORE_MAX/2;
+    if (p->buf_size < 4 || memcmp(p->buf, "fLaC", 4))
+        return 0;
+    return AVPROBE_SCORE_MAX/2;
 }
 
 AVInputFormat ff_flac_demuxer = {
@@ -155,7 +154,7 @@ AVInputFormat ff_flac_demuxer = {
     .read_probe     = flac_probe,
     .read_header    = flac_read_header,
     .read_packet    = ff_raw_read_partial_packet,
-    .flags          = AVFMT_GENERIC_INDEX,
-    .extensions     = "flac",
-    .raw_codec_id   = CODEC_ID_FLAC,
+    .flags= AVFMT_GENERIC_INDEX,
+    .extensions = "flac",
+    .value = CODEC_ID_FLAC,
 };

@@ -315,7 +315,7 @@ static int poll_frame(AVFilterLink *link)
 
     val = avfilter_poll_frame(link->src->inputs[0]);
 
-    if (val >= 1 && !yadif->next) { //FIXME change API to not requre this red tape
+    if (val==1 && !yadif->next) { //FIXME change API to not requre this red tape
         if ((ret = avfilter_request_frame(link->src->inputs[0])) < 0)
             return ret;
         val = avfilter_poll_frame(link->src->inputs[0]);
@@ -370,7 +370,7 @@ static int query_formats(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
 {
     YADIFContext *yadif = ctx->priv;
-    int cpu_flags = av_get_cpu_flags();
+    av_unused int cpu_flags = av_get_cpu_flags();
 
     yadif->mode = 0;
     yadif->parity = -1;

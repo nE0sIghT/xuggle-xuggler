@@ -24,7 +24,6 @@
 #include "internal.h"
 #include "rtpenc_chain.h"
 #include "avio_internal.h"
-#include "rtp.h"
 
 int ff_mov_init_hinting(AVFormatContext *s, int index, int src_index)
 {
@@ -333,7 +332,7 @@ static int write_hint_packets(AVIOContext *out, const uint8_t *data,
         size -= 4;
         if (packet_len > size || packet_len <= 12)
             break;
-        if (RTP_PT_IS_RTCP(data[1])) {
+        if (data[1] >= 200 && data[1] <= 204) {
             /* RTCP packet, just skip */
             data += packet_len;
             size -= packet_len;
@@ -460,3 +459,4 @@ void ff_mov_close_hinting(MOVTrack *track) {
     }
     avformat_free_context(rtp_ctx);
 }
+

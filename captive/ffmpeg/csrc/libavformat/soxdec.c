@@ -44,7 +44,8 @@ static int sox_probe(AVProbeData *p)
     return 0;
 }
 
-static int sox_read_header(AVFormatContext *s)
+static int sox_read_header(AVFormatContext *s,
+                           AVFormatParameters *ap)
 {
     AVIOContext *pb = s->pb;
     unsigned header_size, comment_size;
@@ -150,5 +151,5 @@ AVInputFormat ff_sox_demuxer = {
     .read_probe     = sox_probe,
     .read_header    = sox_read_header,
     .read_packet    = sox_read_packet,
-    .read_seek      = ff_pcm_read_seek,
+    .read_seek      = pcm_read_seek,
 };

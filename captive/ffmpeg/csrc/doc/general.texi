@@ -143,8 +143,6 @@ library:
     @tab Multimedia format used by Delphine Software games.
 @item CD+G                      @tab   @tab X
     @tab Video format used by CD+G karaoke disks
-@item Commodore CDXL            @tab   @tab X
-    @tab Amiga CD video format
 @item Core Audio Format         @tab X @tab X
     @tab Apple Core Audio Format
 @item CRC testing format        @tab X @tab
@@ -210,7 +208,6 @@ library:
 @item MAXIS XA                  @tab   @tab X
     @tab Used in Sim City 3000; file extension .xa.
 @item MD Studio                 @tab   @tab X
-@item Metal Gear Solid: The Twin Snakes @tab @tab X
 @item Mobotix .mxg              @tab   @tab X
 @item Monkey's Audio            @tab   @tab X
 @item Motion Pixels MVI         @tab   @tab X
@@ -352,7 +349,6 @@ library:
 @item eXtended BINary text (XBIN) @tab @tab X
 @item YUV4MPEG pipe             @tab X @tab X
 @item Psygnosis YOP             @tab   @tab X
-@item ZeroCodec Lossless Video  @tab   @tab X
 @end multitable
 
 @code{X} means that encoding (resp. decoding) is supported.
@@ -372,8 +368,6 @@ following image formats are supported:
     @tab Microsoft BMP image
 @item DPX          @tab X @tab X
     @tab Digital Picture Exchange
-@item EXR          @tab   @tab X
-    @tab OpenEXR
 @item JPEG         @tab X @tab X
     @tab Progressive JPEG is not supported.
 @item JPEG 2000    @tab X @tab X
@@ -399,14 +393,12 @@ following image formats are supported:
     @tab V.Flash PTX format
 @item SGI          @tab X @tab X
     @tab SGI RGB image format
-@item Sun Rasterfile  @tab X @tab X
+@item Sun Rasterfile  @tab   @tab X
     @tab Sun RAS image format
 @item TIFF         @tab X @tab X
     @tab YUV, JPEG and some extension is not supported yet.
 @item Truevision Targa  @tab X @tab X
     @tab Targa (.TGA) image format
-@item XBM  @tab X @tab X
-    @tab X BitMap image format
 @item XWD  @tab X @tab X
     @tab X Window Dump image format
 @end multitable
@@ -452,8 +444,6 @@ following image formats are supported:
     @tab fourcc: AVrp
 @item AVS (Audio Video Standard) video  @tab     @tab  X
     @tab Video encoding used by the Creature Shock game.
-@item AYUV                   @tab  X  @tab  X
-    @tab Microsoft uncompressed packed 4:4:4:4
 @item Beam Software VB       @tab     @tab  X
 @item Bethesda VID video     @tab     @tab  X
     @tab Used in some games from Bethesda Softworks.
@@ -468,8 +458,6 @@ following image formats are supported:
     @tab fourcc: CSCD
 @item CD+G                   @tab     @tab  X
     @tab Video codec for CD+G karaoke disks
-@item CDXL                   @tab     @tab  X
-    @tab Amiga CD video codec
 @item Chinese AVS video      @tab  E  @tab  X
     @tab AVS1-P2, JiZhun profile, encoding through external library libxavs
 @item Delphine Software International CIN video  @tab     @tab  X
@@ -503,13 +491,12 @@ following image formats are supported:
 @item Escape 124             @tab     @tab  X
 @item Escape 130             @tab     @tab  X
 @item FFmpeg video codec #1  @tab  X  @tab  X
-    @tab lossless codec (fourcc: FFV1)
+    @tab experimental lossless codec (fourcc: FFV1)
 @item Flash Screen Video v1  @tab  X  @tab  X
     @tab fourcc: FSV1
 @item Flash Screen Video v2  @tab  X  @tab  X
 @item Flash Video (FLV)      @tab  X  @tab  X
     @tab Sorenson H.263 used in Flash
-@item Forward Uncompressed   @tab     @tab  X
 @item Fraps                  @tab     @tab  X
 @item H.261                  @tab  X  @tab  X
 @item H.263 / H.263-1996     @tab  X  @tab  X
@@ -625,7 +612,6 @@ following image formats are supported:
 @item Ut Video               @tab     @tab  X
 @item v210 QuickTime uncompressed 4:2:2 10-bit     @tab  X  @tab  X
 @item v308 QuickTime uncompressed 4:4:4            @tab  X  @tab  X
-@item v408 QuickTime uncompressed 4:4:4:4          @tab  X  @tab  X
 @item v410 QuickTime uncompressed 4:4:4 10-bit     @tab  X  @tab  X
 @item VBLE Lossless Codec    @tab     @tab  X
 @item VMware Screen Codec / VMware Video  @tab     @tab  X
@@ -795,7 +781,6 @@ following image formats are supported:
     @tab Real 28800 bit/s codec
 @item RealAudio 3.0 (dnet)   @tab IX  @tab  X
     @tab Real low bitrate AC-3 codec
-@item RealAudio Lossless     @tab     @tab  X
 @item RealAudio SIPR / ACELP.NET @tab     @tab  X
 @item Shorten                @tab     @tab  X
 @item Sierra VMD audio       @tab     @tab  X
@@ -818,7 +803,6 @@ following image formats are supported:
 @item Westwood Audio (SND1)  @tab     @tab  X
 @item Windows Media Audio 1  @tab  X  @tab  X
 @item Windows Media Audio 2  @tab  X  @tab  X
-@item Windows Media Audio Lossless @tab  @tab  X
 @item Windows Media Audio Pro @tab    @tab  X
 @item Windows Media Audio Voice @tab  @tab  X
 @end multitable
@@ -870,12 +854,11 @@ performance on systems without hardware floating point support).
 @item ALSA              @tab X      @tab X
 @item BKTR              @tab X      @tab
 @item DV1394            @tab X      @tab
-@item Linux framebuffer @tab X      @tab
 @item JACK              @tab X      @tab
-@item LIBCDIO           @tab X
 @item LIBDC1394         @tab X      @tab
 @item OSS               @tab X      @tab X
 @item Pulseaudio        @tab X      @tab
+@item Video4Linux       @tab X      @tab
 @item Video4Linux2      @tab X      @tab
 @item VfW capture       @tab X      @tab
 @item X11 grabbing      @tab X      @tab
@@ -891,7 +874,7 @@ performance on systems without hardware floating point support).
 @item GXF               @tab X      @tab X
 @item MOV               @tab X      @tab
 @item MPEG1/2           @tab X      @tab X
-@item MXF               @tab X      @tab X
+@item MXF               @tab        @tab X
 @end multitable
 
 @bye

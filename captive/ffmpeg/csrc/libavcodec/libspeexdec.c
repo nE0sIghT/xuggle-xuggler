@@ -23,6 +23,7 @@
 #include <speex/speex_stereo.h>
 #include <speex/speex_callbacks.h>
 #include "avcodec.h"
+#include "internal.h"
 
 typedef struct {
     AVFrame frame;
@@ -54,7 +55,9 @@ static av_cold int libspeex_decode_init(AVCodecContext *avctx)
     if (s->header) {
         avctx->sample_rate = s->header->rate;
         avctx->channels    = s->header->nb_channels;
-        s->frame_size      = s->header->frame_size;
+        avctx->frame_size  = s->frame_size = s->header->frame_size;
+        if (s->header->frames_per_packet)
+            avctx->frame_size *= s->header->frames_per_packet;
 
         mode = speex_lib_get_mode(s->header->mode);
         if (!mode) {
@@ -106,7 +109,7 @@ static int libspeex_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = s->frame_size;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -168,5 +171,5 @@ AVCodec ff_libspeex_decoder = {
     .decode         = libspeex_decode_frame,
     .flush          = libspeex_decode_flush,
     .capabilities   = CODEC_CAP_SUBFRAMES | CODEC_CAP_DELAY | CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("libspeex Speex"),
+    .long_name = NULL_IF_CONFIG_SMALL("libspeex Speex"),
 };

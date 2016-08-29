@@ -92,10 +92,11 @@ int main(int argc, char **argv)
     }
 
     for(i=0; ; i++){
-        AVPacket pkt = { 0 };
+        AVPacket pkt;
         AVStream *av_uninit(st);
         char ts_buf[60];
 
+        memset(&pkt, 0, sizeof(pkt));
         if(ret>=0){
             ret= av_read_frame(ic, &pkt);
             if(ret>=0){

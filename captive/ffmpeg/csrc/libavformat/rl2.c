@@ -69,9 +69,11 @@ static int rl2_probe(AVProbeData *p)
 /**
  * read rl2 header data and setup the avstreams
  * @param s demuxer context
+ * @param ap format parameters
  * @return 0 on success, AVERROR otherwise
  */
-static av_cold int rl2_read_header(AVFormatContext *s)
+static av_cold int rl2_read_header(AVFormatContext *s,
+                            AVFormatParameters *ap)
 {
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -107,6 +109,10 @@ static av_cold int rl2_read_header(AVFormatContext *s)
     rate = avio_rl16(pb);
     channels = avio_rl16(pb);
     def_sound_size = avio_rl16(pb);
+    if (!channels || channels > 42) {
+        av_log(s, AV_LOG_ERROR, "Invalid number of channels: %d\n", channels);
+        return AVERROR_INVALIDDATA;
+    }
 
     /** setup video stream */
     st = avformat_new_stream(s, NULL);
@@ -296,3 +302,4 @@ AVInputFormat ff_rl2_demuxer = {
     .read_packet    = rl2_read_packet,
     .read_seek      = rl2_read_seek,
 };
+

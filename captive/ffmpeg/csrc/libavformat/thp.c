@@ -54,7 +54,8 @@ static int thp_probe(AVProbeData *p)
         return 0;
 }
 
-static int thp_read_header(AVFormatContext *s)
+static int thp_read_header(AVFormatContext *s,
+                           AVFormatParameters *ap)
 {
     ThpDemuxContext *thp = s->priv_data;
     AVStream *st;
@@ -178,15 +179,14 @@ static int thp_read_packet(AVFormatContext *s,
         pkt->stream_index = thp->video_stream_index;
     } else {
         ret = av_get_packet(pb, pkt, thp->audiosize);
+        if (ret < 0)
+            return ret;
         if (ret != thp->audiosize) {
             av_free_packet(pkt);
             return AVERROR(EIO);
         }
 
         pkt->stream_index = thp->audio_stream_index;
-        if (thp->audiosize >= 8)
-            pkt->duration = AV_RB32(&pkt->data[4]);
-
         thp->audiosize = 0;
         thp->frame++;
     }

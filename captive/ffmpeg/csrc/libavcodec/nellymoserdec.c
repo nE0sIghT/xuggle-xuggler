@@ -36,6 +36,7 @@
 #include "libavutil/random_seed.h"
 #include "libavutil/audioconvert.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "dsputil.h"
 #include "fft.h"
 #include "fmtconvert.h"
@@ -49,15 +50,14 @@ typedef struct NellyMoserDecodeContext {
     AVCodecContext* avctx;
     AVFrame         frame;
     float          *float_buf;
+    DECLARE_ALIGNED(16, float, state)[NELLY_BUF_LEN];
     AVLFG           random_state;
     GetBitContext   gb;
     float           scale_bias;
     DSPContext      dsp;
     FFTContext      imdct_ctx;
     FmtConvertContext fmt_conv;
-    DECLARE_ALIGNED(32, float, imdct_buf)[2][NELLY_BUF_LEN];
-    float          *imdct_out;
-    float          *imdct_prev;
+    DECLARE_ALIGNED(32, float, imdct_out)[NELLY_BUF_LEN * 2];
 } NellyMoserDecodeContext;
 
 static void nelly_decode_block(NellyMoserDecodeContext *s,
@@ -107,9 +107,12 @@ static void nelly_decode_block(NellyMoserDecodeContext *s,
         memset(&aptr[NELLY_FILL_LEN], 0,
                (NELLY_BUF_LEN - NELLY_FILL_LEN) * sizeof(float));
 
-        s->imdct_ctx.imdct_half(&s->imdct_ctx, s->imdct_out, aptr);
-        s->dsp.vector_fmul_window(aptr, s->imdct_prev + NELLY_BUF_LEN/2, s->imdct_out, ff_sine_128, NELLY_BUF_LEN/2);
-        FFSWAP(float *, s->imdct_out, s->imdct_prev);
+        s->imdct_ctx.imdct_calc(&s->imdct_ctx, s->imdct_out, aptr);
+        /* XXX: overlapping and windowing should be part of a more
+           generic imdct function */
+        s->dsp.vector_fmul_reverse(s->state, s->state, ff_sine_128, NELLY_BUF_LEN);
+        s->dsp.vector_fmul_add(aptr, s->imdct_out, ff_sine_128, s->state, NELLY_BUF_LEN);
+        memcpy(s->state, s->imdct_out + NELLY_BUF_LEN, sizeof(float)*NELLY_BUF_LEN);
     }
 }
 
@@ -117,12 +120,10 @@ static av_cold int decode_init(AVCodecContext * avctx) {
     NellyMoserDecodeContext *s = avctx->priv_data;
 
     s->avctx = avctx;
-    s->imdct_out = s->imdct_buf[0];
-    s->imdct_prev = s->imdct_buf[1];
     av_lfg_init(&s->random_state, 0);
     ff_mdct_init(&s->imdct_ctx, 8, 1, 1.0);
 
-    ff_dsputil_init(&s->dsp, avctx);
+    dsputil_init(&s->dsp, avctx);
 
     if (avctx->request_sample_fmt == AV_SAMPLE_FMT_FLT) {
         s->scale_bias = 1.0/(32768*8);
@@ -184,7 +185,7 @@ static int decode_tag(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = NELLY_SAMPLES * blocks;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -227,8 +228,9 @@ AVCodec ff_nellymoser_decoder = {
     .close          = decode_end,
     .decode         = decode_tag,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_PARAM_CHANGE,
-    .long_name      = NULL_IF_CONFIG_SMALL("Nellymoser Asao"),
+    .long_name = NULL_IF_CONFIG_SMALL("Nellymoser Asao"),
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLT,
                                                       AV_SAMPLE_FMT_S16,
                                                       AV_SAMPLE_FMT_NONE },
 };
+

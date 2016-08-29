@@ -30,7 +30,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "libavformat/avformat.h"
-// FIXME those are internal headers, ffserver _really_ shouldn't use them
+// FIXME those are internal headers, avserver _really_ shouldn't use them
 #include "libavformat/ffm.h"
 #include "libavformat/network.h"
 #include "libavformat/os_support.h"
@@ -339,7 +339,8 @@ static int resolve_host(struct in_addr *sin_addr, const char *hostname)
     if (!ff_inet_aton(hostname, sin_addr)) {
 #if HAVE_GETADDRINFO
         struct addrinfo *ai, *cur;
-        struct addrinfo hints = { 0 };
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_INET;
         if (getaddrinfo(hostname, NULL, &hints, &ai))
             return -1;
@@ -561,9 +562,11 @@ static void start_multicast(void)
     default_port = 6000;
     for(stream = first_stream; stream != NULL; stream = stream->next) {
         if (stream->is_multicast) {
+            unsigned random0 = av_lfg_get(&random_state);
+            unsigned random1 = av_lfg_get(&random_state);
             /* open the RTP connection */
             snprintf(session_id, sizeof(session_id), "%08x%08x",
-                     av_lfg_get(&random_state), av_lfg_get(&random_state));
+                     random0, random1);
 
             /* choose a port if none given */
             if (stream->multicast_port == 0) {
@@ -1871,7 +1874,7 @@ static int http_parse_request(HTTPContext *c)
 
 static void fmt_bytecount(AVIOContext *pb, int64_t count)
 {
-    static const char suffix[] = " kMGTP";
+    static const char *suffix = " kMGTP";
     const char *s;
 
     for (s = suffix; count >= 100000 && s[1]; count /= 1000, s++);
@@ -2126,13 +2129,12 @@ static int open_input_stream(HTTPContext *c, const char *info)
     char buf[128];
     char input_filename[1024];
     AVFormatContext *s = NULL;
-    int buf_size, i, ret;
+    int i, ret;
     int64_t stream_pos;
 
     /* find file name */
     if (c->stream->feed) {
         strcpy(input_filename, c->stream->feed->feed_filename);
-        buf_size = FFM_PACKET_SIZE;
         /* compute position (absolute time) */
         if (av_find_info_tag(buf, sizeof(buf), "date", info)) {
             if ((ret = av_parse_time(&stream_pos, buf, 0)) < 0)
@@ -2144,7 +2146,6 @@ static int open_input_stream(HTTPContext *c, const char *info)
             stream_pos = av_gettime() - c->stream->prebuffer * (int64_t)1000;
     } else {
         strcpy(input_filename, c->stream->feed_filename);
-        buf_size = 0;
         /* compute position (relative time) */
         if (av_find_info_tag(buf, sizeof(buf), "date", info)) {
             if ((ret = av_parse_time(&stream_pos, buf, 1)) < 0)
@@ -2160,10 +2161,6 @@ static int open_input_stream(HTTPContext *c, const char *info)
         http_log("could not open %s: %d\n", input_filename, ret);
         return -1;
     }
-
-    /* set buffer size */
-    if (buf_size > 0) ffio_set_buf_size(s->pb, buf_size);
-
     s->flags |= AVFMT_FLAG_GENPTS;
     c->fmt_in = s;
     if (strcmp(s->iformat->name, "ffm") && avformat_find_stream_info(c->fmt_in, NULL) < 0) {
@@ -2834,7 +2831,7 @@ static int rtsp_parse_request(HTTPContext *c)
     char protocol[32];
     char line[1024];
     int len;
-    RTSPMessageHeader header1 = { 0 }, *header = &header1;
+    RTSPMessageHeader header1, *header = &header1;
 
     c->buffer_ptr[0] = '\0';
     p = c->buffer;
@@ -2860,6 +2857,7 @@ static int rtsp_parse_request(HTTPContext *c)
     }
 
     /* parse each header line */
+    memset(header, 0, sizeof(*header));
     /* skip to next line */
     while (*p != '\n' && *p != '\0')
         p++;
@@ -3090,9 +3088,12 @@ static void rtsp_cmd_setup(HTTPContext *c, const char *url,
  found:
 
     /* generate session id if needed */
-    if (h->session_id[0] == '\0')
+    if (h->session_id[0] == '\0') {
+        unsigned random0 = av_lfg_get(&random_state);
+        unsigned random1 = av_lfg_get(&random_state);
         snprintf(h->session_id, sizeof(h->session_id), "%08x%08x",
-                 av_lfg_get(&random_state), av_lfg_get(&random_state));
+                 random0, random1);
+    }
 
     /* find rtp session, and create it if none found */
     rtp_c = find_rtp_session(h->session_id);
@@ -3461,6 +3462,9 @@ static AVStream *add_av_stream1(FFStream *stream, AVCodecContext *codec, int cop
 {
     AVStream *fst;
 
+    if(stream->nb_streams >= FF_ARRAY_ELEMS(stream->streams))
+        return NULL;
+
     fst = av_mallocz(sizeof(AVStream));
     if (!fst)
         return NULL;
@@ -3666,8 +3670,6 @@ static void build_feed_streams(void)
             int matches = 0;
 
             if (avformat_open_input(&s, feed->feed_filename, NULL, NULL) >= 0) {
-                /* set buffer size */
-                ffio_set_buf_size(s->pb, FFM_PACKET_SIZE);
                 /* Now see if it matches */
                 if (s->nb_streams == feed->nb_streams) {
                     matches = 1;
@@ -3807,6 +3809,9 @@ static void compute_bandwidth(void)
 static void add_codec(FFStream *stream, AVCodecContext *av)
 {
     AVStream *st;
+
+    if(stream->nb_streams >= FF_ARRAY_ELEMS(stream->streams))
+        return;
 
     /* compute default parameters */
     switch(av->codec_type) {
@@ -4227,8 +4232,8 @@ static int parse_ffconfig(const char *filename)
                 }
 
                 stream->fmt = ffserver_guess_format(NULL, stream->filename, NULL);
-                avcodec_get_context_defaults3(&video_enc, NULL);
-                avcodec_get_context_defaults3(&audio_enc, NULL);
+                avcodec_get_context_defaults2(&video_enc, AVMEDIA_TYPE_VIDEO);
+                avcodec_get_context_defaults2(&audio_enc, AVMEDIA_TYPE_AUDIO);
 
                 audio_id = CODEC_ID_NONE;
                 video_id = CODEC_ID_NONE;
@@ -4662,7 +4667,7 @@ static const OptionDef options[] = {
 
 int main(int argc, char **argv)
 {
-    struct sigaction sigact = { { 0 } };
+    struct sigaction sigact;
 
     parse_loglevel(argc, argv, options);
     av_register_all();
@@ -4680,6 +4685,7 @@ int main(int argc, char **argv)
 
     av_lfg_init(&random_state, av_get_random_seed());
 
+    memset(&sigact, 0, sizeof(sigact));
     sigact.sa_handler = handle_child_exit;
     sigact.sa_flags = SA_NOCLDSTOP | SA_RESTART;
     sigaction(SIGCHLD, &sigact, 0);

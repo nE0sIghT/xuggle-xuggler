@@ -1671,7 +1671,7 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     avctx->chroma_sample_location = AVCHROMA_LOC_CENTER;
     if(avctx->idct_algo==FF_IDCT_AUTO)
         avctx->idct_algo=FF_IDCT_VP3;
-    ff_dsputil_init(&s->dsp, avctx);
+    dsputil_init(&s->dsp, avctx);
 
     ff_init_scantable(s->dsp.idct_permutation, &s->scantable, ff_zigzag_direct);
 
@@ -2150,6 +2150,10 @@ static int theora_decode_header(AVCodecContext *avctx, GetBitContext *gb)
     fps.num = get_bits_long(gb, 32);
     fps.den = get_bits_long(gb, 32);
     if (fps.num && fps.den) {
+        if (fps.num < 0 || fps.den < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid framerate\n");
+            return AVERROR_INVALIDDATA;
+        }
         av_reduce(&avctx->time_base.num, &avctx->time_base.den,
                   fps.den, fps.num, 1<<30);
     }
@@ -2369,34 +2373,32 @@ static av_cold int theora_decode_init(AVCodecContext *avctx)
 }
 
 AVCodec ff_theora_decoder = {
-    .name                  = "theora",
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = CODEC_ID_THEORA,
-    .priv_data_size        = sizeof(Vp3DecodeContext),
-    .init                  = theora_decode_init,
-    .close                 = vp3_decode_end,
-    .decode                = vp3_decode_frame,
-    .capabilities          = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND |
-                             CODEC_CAP_FRAME_THREADS,
-    .flush                 = vp3_decode_flush,
-    .long_name             = NULL_IF_CONFIG_SMALL("Theora"),
+    .name           = "theora",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_THEORA,
+    .priv_data_size = sizeof(Vp3DecodeContext),
+    .init           = theora_decode_init,
+    .close          = vp3_decode_end,
+    .decode         = vp3_decode_frame,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_FRAME_THREADS,
+    .flush = vp3_decode_flush,
+    .long_name = NULL_IF_CONFIG_SMALL("Theora"),
     .init_thread_copy      = ONLY_IF_THREADS_ENABLED(vp3_init_thread_copy),
     .update_thread_context = ONLY_IF_THREADS_ENABLED(vp3_update_thread_context)
 };
 #endif
 
 AVCodec ff_vp3_decoder = {
-    .name                  = "vp3",
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = CODEC_ID_VP3,
-    .priv_data_size        = sizeof(Vp3DecodeContext),
-    .init                  = vp3_decode_init,
-    .close                 = vp3_decode_end,
-    .decode                = vp3_decode_frame,
-    .capabilities          = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND |
-                             CODEC_CAP_FRAME_THREADS,
-    .flush                 = vp3_decode_flush,
-    .long_name             = NULL_IF_CONFIG_SMALL("On2 VP3"),
+    .name           = "vp3",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_VP3,
+    .priv_data_size = sizeof(Vp3DecodeContext),
+    .init           = vp3_decode_init,
+    .close          = vp3_decode_end,
+    .decode         = vp3_decode_frame,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_FRAME_THREADS,
+    .flush = vp3_decode_flush,
+    .long_name = NULL_IF_CONFIG_SMALL("On2 VP3"),
     .init_thread_copy      = ONLY_IF_THREADS_ENABLED(vp3_init_thread_copy),
-    .update_thread_context = ONLY_IF_THREADS_ENABLED(vp3_update_thread_context),
+    .update_thread_context = ONLY_IF_THREADS_ENABLED(vp3_update_thread_context)
 };

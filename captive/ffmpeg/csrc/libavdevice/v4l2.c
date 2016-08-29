@@ -51,7 +51,6 @@
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "avdevice.h"
-#include "timefilter.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
@@ -74,28 +73,6 @@ static const int desired_video_buffers = 256;
 #define V4L_RAWFORMATS  1
 #define V4L_COMPFORMATS 2
 
-/**
- * Return timestamps to the user exactly as returned by the kernel
- */
-#define V4L_TS_DEFAULT  0
-/**
- * Autodetect the kind of timestamps returned by the kernel and convert to
- * absolute (wall clock) timestamps.
- */
-#define V4L_TS_ABS      1
-/**
- * Assume kernel timestamps are from the monotonic clock and convert to
- * absolute timestamps.
- */
-#define V4L_TS_MONO2ABS 2
-
-/**
- * Once the kind of timestamps returned by the kernel have been detected,
- * the value of the timefilter (NULL or not) determines whether a conversion
- * takes place.
- */
-#define V4L_TS_CONVERT_READY V4L_TS_DEFAULT
-
 struct video_data {
     AVClass *class;
     int fd;
@@ -104,9 +81,6 @@ struct video_data {
     int frame_size;
     int interlaced;
     int top_field_first;
-    int ts_mode;
-    TimeFilter *timefilter;
-    int64_t last_time_m;
 
     int buffers;
     void **buf_start;
@@ -134,20 +108,16 @@ struct fmt_map {
 static struct fmt_map fmt_conversion_table[] = {
     //ff_fmt           codec_id           v4l2_fmt
     { PIX_FMT_YUV420P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV420  },
-    { PIX_FMT_YUV420P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YVU420  },
     { PIX_FMT_YUV422P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV422P },
     { PIX_FMT_YUYV422, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUYV    },
     { PIX_FMT_UYVY422, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_UYVY    },
     { PIX_FMT_YUV411P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV411P },
     { PIX_FMT_YUV410P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV410  },
-    { PIX_FMT_RGB555LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
-    { PIX_FMT_RGB555BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555X },
-    { PIX_FMT_RGB565LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
-    { PIX_FMT_RGB565BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565X },
+    { PIX_FMT_RGB555,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
+    { PIX_FMT_RGB565,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
     { PIX_FMT_BGR24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR24   },
     { PIX_FMT_RGB24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB24   },
-    { PIX_FMT_BGR0,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
-    { PIX_FMT_0RGB,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB32   },
+    { PIX_FMT_BGRA,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
     { PIX_FMT_GRAY8,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_GREY    },
     { PIX_FMT_NV12,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_NV12    },
     { PIX_FMT_NONE,    CODEC_ID_MJPEG,    V4L2_PIX_FMT_MJPEG   },
@@ -481,66 +451,6 @@ static void mmap_release_buffer(AVPacket *pkt)
     pkt->size = 0;
 }
 
-#if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
-static int64_t av_gettime_monotonic(void)
-{
-    struct timespec tv;
-
-    clock_gettime(CLOCK_MONOTONIC, &tv);
-    return (int64_t)tv.tv_sec * 1000000 + tv.tv_nsec / 1000;
-}
-#endif
-
-static int init_convert_timestamp(AVFormatContext *ctx, int64_t ts)
-{
-    struct video_data *s = ctx->priv_data;
-    int64_t now;
-
-    now = av_gettime();
-    if (s->ts_mode == V4L_TS_ABS &&
-        ts <= now + 1 * AV_TIME_BASE && ts >= now - 10 * AV_TIME_BASE) {
-        av_log(ctx, AV_LOG_INFO, "Detected absolute timestamps\n");
-        s->ts_mode = V4L_TS_CONVERT_READY;
-        return 0;
-    }
-#if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
-    now = av_gettime_monotonic();
-    if (s->ts_mode == V4L_TS_MONO2ABS ||
-        (ts <= now + 1 * AV_TIME_BASE && ts >= now - 10 * AV_TIME_BASE)) {
-        int64_t period = av_rescale_q(1, ctx->streams[0]->codec->time_base,
-                                      AV_TIME_BASE_Q);
-        av_log(ctx, AV_LOG_INFO, "Detected monotonic timestamps, converting\n");
-        /* microseconds instead of seconds, MHz instead of Hz */
-        s->timefilter = ff_timefilter_new(1, period, 1.0E-6);
-        s->ts_mode = V4L_TS_CONVERT_READY;
-        return 0;
-    }
-#endif
-    av_log(ctx, AV_LOG_ERROR, "Unknown timestamps\n");
-    return AVERROR(EIO);
-}
-
-static int convert_timestamp(AVFormatContext *ctx, int64_t *ts)
-{
-    struct video_data *s = ctx->priv_data;
-
-    if (s->ts_mode) {
-        int r = init_convert_timestamp(ctx, *ts);
-        if (r < 0)
-            return r;
-    }
-#if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
-    if (s->timefilter) {
-        int64_t nowa = av_gettime();
-        int64_t nowm = av_gettime_monotonic();
-        ff_timefilter_update(s->timefilter, nowa, nowm - s->last_time_m);
-        s->last_time_m = nowm;
-        *ts = ff_timefilter_eval(s->timefilter, *ts - nowm);
-    }
-#endif
-    return 0;
-}
-
 static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
 {
     struct video_data *s = ctx->priv_data;
@@ -576,9 +486,6 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
     pkt->data= s->buf_start[buf.index];
     pkt->size = buf.bytesused;
     pkt->pts = buf.timestamp.tv_sec * INT64_C(1000000) + buf.timestamp.tv_usec;
-    res = convert_timestamp(ctx, &pkt->pts);
-    if (res < 0)
-        return res;
     pkt->destruct = mmap_release_buffer;
     buf_descriptor = av_malloc(sizeof(struct buff_data));
     if (buf_descriptor == NULL) {
@@ -648,7 +555,7 @@ static void mmap_close(struct video_data *s)
     av_free(s->buf_len);
 }
 
-static int v4l2_set_parameters(AVFormatContext *s1)
+static int v4l2_set_parameters(AVFormatContext *s1, AVFormatParameters *ap)
 {
     struct video_data *s = s1->priv_data;
     struct v4l2_input input = { 0 };
@@ -776,7 +683,7 @@ static uint32_t device_try_init(AVFormatContext *s1,
     return desired_format;
 }
 
-static int v4l2_read_header(AVFormatContext *s1)
+static int v4l2_read_header(AVFormatContext *s1, AVFormatParameters *ap)
 {
     struct video_data *s = s1->priv_data;
     AVStream *st;
@@ -863,7 +770,7 @@ static int v4l2_read_header(AVFormatContext *s1)
 
     s->frame_format = desired_format;
 
-    if ((res = v4l2_set_parameters(s1)) < 0)
+    if ((res = v4l2_set_parameters(s1, ap)) < 0)
         goto out;
 
     st->codec->pix_fmt = fmt_v4l2ff(desired_format, codec_id);
@@ -883,8 +790,6 @@ static int v4l2_read_header(AVFormatContext *s1)
     if (codec_id == CODEC_ID_RAWVIDEO)
         st->codec->codec_tag =
             avcodec_pix_fmt_to_codec_tag(st->codec->pix_fmt);
-    if (desired_format == V4L2_PIX_FMT_YVU420)
-        st->codec->codec_tag = MKTAG('Y', 'V', '1', '2');
     st->codec->width = s->width;
     st->codec->height = s->height;
     st->codec->bit_rate = s->frame_size * 1/av_q2d(st->codec->time_base) * 8;
@@ -936,11 +841,6 @@ static const AVOption options[] = {
     { "all",          "Show all available formats",                                OFFSET(list_format),  AV_OPT_TYPE_CONST,  {.dbl = V4L_ALLFORMATS  },    0, INT_MAX, DEC, "list_formats" },
     { "raw",          "Show only non-compressed formats",                          OFFSET(list_format),  AV_OPT_TYPE_CONST,  {.dbl = V4L_RAWFORMATS  },    0, INT_MAX, DEC, "list_formats" },
     { "compressed",   "Show only compressed formats",                              OFFSET(list_format),  AV_OPT_TYPE_CONST,  {.dbl = V4L_COMPFORMATS },    0, INT_MAX, DEC, "list_formats" },
-    { "timestamps",   "Kind of timestamps for grabbed frames",                     OFFSET(ts_mode),      AV_OPT_TYPE_INT,    {.dbl = 0 }, 0, 2, DEC, "timestamps" },
-    { "default",      "Use timestamps from the kernel",                            OFFSET(ts_mode),      AV_OPT_TYPE_CONST,  {.dbl = V4L_TS_DEFAULT  }, 0, 2, DEC, "timestamps" },
-    { "abs",          "Use absolute timestamps (wall clock)",                      OFFSET(ts_mode),      AV_OPT_TYPE_CONST,  {.dbl = V4L_TS_ABS      }, 0, 2, DEC, "timestamps" },
-    { "mono2abs",     "Force conversion from monotonic to absolute timestamps",    OFFSET(ts_mode),      AV_OPT_TYPE_CONST,  {.dbl = V4L_TS_MONO2ABS }, 0, 2, DEC, "timestamps" },
-    { "ts",           "Kind of timestamps for grabbed frames",                     OFFSET(ts_mode),      AV_OPT_TYPE_INT,    {.dbl = 0 }, 0, 2, DEC, "timestamps" },
     { NULL },
 };
 

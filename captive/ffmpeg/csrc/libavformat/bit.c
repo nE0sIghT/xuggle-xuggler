@@ -47,7 +47,7 @@ static int probe(AVProbeData *p)
     return AVPROBE_SCORE_MAX/2;
 }
 
-static int read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     AVStream* st;
 
@@ -131,6 +131,9 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb = s->pb;
     GetBitContext gb;
     int i;
+
+    if (pkt->size != 10)
+        return AVERROR(EINVAL);
 
     avio_wl16(pb, SYNC_WORD);
     avio_wl16(pb, 8 * 10);

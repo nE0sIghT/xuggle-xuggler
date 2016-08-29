@@ -69,7 +69,7 @@ typedef struct RoqContext {
 
     unsigned int framesSinceKeyframe;
 
-    const AVFrame *frame_to_enc;
+    AVFrame *frame_to_enc;
     uint8_t *out_buf;
     struct RoqTempData *tmpData;
 } RoqContext;

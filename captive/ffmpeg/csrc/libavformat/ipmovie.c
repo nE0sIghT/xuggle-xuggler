@@ -536,7 +536,8 @@ static int ipmovie_probe(AVProbeData *p)
     return 0;
 }
 
-static int ipmovie_read_header(AVFormatContext *s)
+static int ipmovie_read_header(AVFormatContext *s,
+                               AVFormatParameters *ap)
 {
     IPMVEContext *ipmovie = s->priv_data;
     AVIOContext *pb = s->pb;

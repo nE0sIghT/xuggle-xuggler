@@ -29,7 +29,6 @@
 #include "bytestream.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/imgutils.h"
-#include "libavutil/opt.h"
 
 #define RGBA(r,g,b,a) (((a) << 24) | ((r) << 16) | ((g) << 8) | (b))
 
@@ -45,7 +44,6 @@ typedef struct PGSSubPictureReference {
     int x;
     int y;
     int picture_id;
-    int composition;
 } PGSSubPictureReference;
 
 typedef struct PGSSubPresentation {
@@ -63,11 +61,9 @@ typedef struct PGSSubPicture {
 } PGSSubPicture;
 
 typedef struct PGSSubContext {
-    AVClass *class;
     PGSSubPresentation presentation;
     uint32_t           clut[256];
     PGSSubPicture      pictures[UINT16_MAX];
-    int forced_subs_only;
 } PGSSubContext;
 
 static av_cold int init_decoder(AVCodecContext *avctx)
@@ -211,6 +207,13 @@ static int parse_picture_segment(AVCodecContext *avctx,
     /* Decode rle bitmap length, stored size includes width/height data */
     rle_bitmap_len = bytestream_get_be24(&buf) - 2*2;
 
+    if (buf_size > rle_bitmap_len) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Buffer dimension %d larger than the expected RLE data %d\n",
+               buf_size, rle_bitmap_len);
+        return AVERROR_INVALIDDATA;
+    }
+
     /* Get bitmap dimensions from data */
     width  = bytestream_get_be16(&buf);
     height = bytestream_get_be16(&buf);
@@ -287,6 +290,7 @@ static void parse_palette_segment(AVCodecContext *avctx,
  * @param buf pointer to the packet to process
  * @param buf_size size of packet to process
  * @todo TODO: Implement cropping
+ * @todo TODO: Implement forcing of subtitles
  */
 static void parse_presentation_segment(AVCodecContext *avctx,
                                        const uint8_t *buf, int buf_size)
@@ -338,10 +342,12 @@ static void parse_presentation_segment(AVCodecContext *avctx,
         PGSSubPictureReference *reference = &ctx->presentation.objects[object_index];
         reference->picture_id             = bytestream_get_be16(&buf);
 
-        /* Skip window_id_ref */
-        buf++;
-        /* composition_flag (0x80 - object cropped, 0x40 - object forced) */
-        reference->composition = bytestream_get_byte(&buf);
+         /*
+         * Skip 2 bytes of unknown:
+         *     window_id_ref,
+         *     composition_flag (0x80 - object cropped, 0x40 - object forced)
+         */
+        buf += 2;
 
         reference->x = bytestream_get_be16(&buf);
         reference->y = bytestream_get_be16(&buf);
@@ -423,7 +429,6 @@ static int display_end_segment(AVCodecContext *avctx, void *data,
         sub->rects[rect]->nb_colors    = 256;
         sub->rects[rect]->pict.data[1] = av_mallocz(AVPALETTE_SIZE);
 
-        if (!ctx->forced_subs_only || ctx->presentation.objects[rect].composition & 0x40)
         memcpy(sub->rects[rect]->pict.data[1], ctx->clut, sub->rects[rect]->nb_colors * sizeof(uint32_t));
     }
 
@@ -483,7 +488,7 @@ static int decode(AVCodecContext *avctx, void *data, int *data_size,
         case WINDOW_SEGMENT:
             /*
              * Window Segment Structure (No new information provided):
-             *     2 bytes: Unknown,
+             *     2 bytes: Unkown,
              *     2 bytes: X position of subtitle,
              *     2 bytes: Y position of subtitle,
              *     2 bytes: Width of subtitle,
@@ -505,20 +510,6 @@ static int decode(AVCodecContext *avctx, void *data, int *data_size,
     return buf_size;
 }
 
-#define OFFSET(x) offsetof(PGSSubContext, x)
-#define SD AV_OPT_FLAG_SUBTITLE_PARAM | AV_OPT_FLAG_DECODING_PARAM
-static const AVOption options[] = {
-    {"forced_subs_only", "Only show forced subtitles", OFFSET(forced_subs_only), AV_OPT_TYPE_INT, {.dbl = 0}, 0, 1, SD},
-    { NULL },
-};
-
-static const AVClass pgsdec_class = {
-    .class_name = "PGS subtitle decoder",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
 AVCodec ff_pgssub_decoder = {
     .name           = "pgssub",
     .type           = AVMEDIA_TYPE_SUBTITLE,
@@ -527,6 +518,5 @@ AVCodec ff_pgssub_decoder = {
     .init           = init_decoder,
     .close          = close_decoder,
     .decode         = decode,
-    .long_name      = NULL_IF_CONFIG_SMALL("HDMV Presentation Graphic Stream subtitles"),
-    .priv_class     = &pgsdec_class,
+    .long_name = NULL_IF_CONFIG_SMALL("HDMV Presentation Graphic Stream subtitles"),
 };

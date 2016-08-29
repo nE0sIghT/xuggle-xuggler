@@ -47,6 +47,7 @@
 
 
 #include "avcodec.h"
+#include "internal.h"
 #include "get_bits.h"
 #include "bytestream.h"
 #include "unary.h"
@@ -417,7 +418,7 @@ static int alac_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
     alac->frame.nb_samples = outputsamples;
-    if ((ret = avctx->get_buffer(avctx, &alac->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &alac->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -602,30 +603,35 @@ buf_alloc_fail:
 
 static int alac_set_info(ALACContext *alac)
 {
-    GetByteContext gb;
+    const unsigned char *ptr = alac->avctx->extradata;
 
-    bytestream2_init(&gb, alac->avctx->extradata,
-                     alac->avctx->extradata_size);
+    ptr += 4; /* size */
+    ptr += 4; /* alac */
+    ptr += 4; /* version */
 
-    bytestream2_skipu(&gb, 12); // size:4, alac:4, version:4
+    if(AV_RB32(ptr) >= UINT_MAX/4){
+        av_log(alac->avctx, AV_LOG_ERROR, "setinfo_max_samples_per_frame too large\n");
+        return -1;
+    }
 
     /* buffer size / 2 ? */
-    alac->setinfo_max_samples_per_frame = bytestream2_get_be32u(&gb);
-    if (alac->setinfo_max_samples_per_frame >= UINT_MAX/4){
-        av_log(alac->avctx, AV_LOG_ERROR,
-               "setinfo_max_samples_per_frame too large\n");
+    alac->setinfo_max_samples_per_frame = bytestream_get_be32(&ptr);
+    if (!alac->setinfo_max_samples_per_frame ||
+        alac->setinfo_max_samples_per_frame > INT_MAX / sizeof(int32_t)) {
+        av_log(alac->avctx, AV_LOG_ERROR, "max samples per frame invalid: %u\n",
+               alac->setinfo_max_samples_per_frame);
         return AVERROR_INVALIDDATA;
     }
-    bytestream2_skipu(&gb, 1);  // compatible version
-    alac->setinfo_sample_size           = bytestream2_get_byteu(&gb);
-    alac->setinfo_rice_historymult      = bytestream2_get_byteu(&gb);
-    alac->setinfo_rice_initialhistory   = bytestream2_get_byteu(&gb);
-    alac->setinfo_rice_kmodifier        = bytestream2_get_byteu(&gb);
-    alac->numchannels                   = bytestream2_get_byteu(&gb);
-    bytestream2_get_be16u(&gb); // maxRun
-    bytestream2_get_be32u(&gb); // max coded frame size
-    bytestream2_get_be32u(&gb); // average bitrate
-    bytestream2_get_be32u(&gb); // samplerate
+    ptr++;                          /* compatible version */
+    alac->setinfo_sample_size           = *ptr++;
+    alac->setinfo_rice_historymult      = *ptr++;
+    alac->setinfo_rice_initialhistory   = *ptr++;
+    alac->setinfo_rice_kmodifier        = *ptr++;
+    alac->numchannels                   = *ptr++;
+    bytestream_get_be16(&ptr);      /* maxRun */
+    bytestream_get_be32(&ptr);      /* max coded frame size */
+    bytestream_get_be32(&ptr);      /* average bitrate */
+    bytestream_get_be32(&ptr);      /* samplerate */
 
     return 0;
 }
@@ -637,10 +643,9 @@ static av_cold int alac_decode_init(AVCodecContext * avctx)
     alac->avctx = avctx;
 
     /* initialize from the extradata */
-    if (alac->avctx->extradata_size != ALAC_EXTRADATA_SIZE) {
-        av_log(avctx, AV_LOG_ERROR, "alac: expected %d extradata bytes\n",
-            ALAC_EXTRADATA_SIZE);
-        return -1;
+    if (alac->avctx->extradata_size < ALAC_EXTRADATA_SIZE) {
+        av_log(avctx, AV_LOG_ERROR, "alac: extradata is too small\n");
+        return AVERROR_INVALIDDATA;
     }
     if (alac_set_info(alac)) {
         av_log(avctx, AV_LOG_ERROR, "alac: set_info failed\n");
@@ -693,5 +698,5 @@ AVCodec ff_alac_decoder = {
     .close          = alac_decode_close,
     .decode         = alac_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("ALAC (Apple Lossless Audio Codec)"),
+    .long_name = NULL_IF_CONFIG_SMALL("ALAC (Apple Lossless Audio Codec)"),
 };

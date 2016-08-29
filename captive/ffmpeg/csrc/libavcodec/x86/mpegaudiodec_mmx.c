@@ -106,26 +106,7 @@ static void apply_window_mp3(float *in, float *win, int *unused, float *out,
     float sum;
 
     /* copy to avoid wrap */
-    __asm__ volatile(
-            "movaps    0(%0), %%xmm0   \n\t" \
-            "movaps   16(%0), %%xmm1   \n\t" \
-            "movaps   32(%0), %%xmm2   \n\t" \
-            "movaps   48(%0), %%xmm3   \n\t" \
-            "movaps   %%xmm0,   0(%1) \n\t" \
-            "movaps   %%xmm1,  16(%1) \n\t" \
-            "movaps   %%xmm2,  32(%1) \n\t" \
-            "movaps   %%xmm3,  48(%1) \n\t" \
-            "movaps   64(%0), %%xmm0   \n\t" \
-            "movaps   80(%0), %%xmm1   \n\t" \
-            "movaps   96(%0), %%xmm2   \n\t" \
-            "movaps  112(%0), %%xmm3   \n\t" \
-            "movaps   %%xmm0,  64(%1) \n\t" \
-            "movaps   %%xmm1,  80(%1) \n\t" \
-            "movaps   %%xmm2,  96(%1) \n\t" \
-            "movaps   %%xmm3, 112(%1) \n\t"
-            ::"r"(in), "r"(in+512)
-            :"memory"
-            );
+    memcpy(in + 512, in, 32 * sizeof(*in));
 
     apply_window(in + 16, win     , win + 512, suma, sumc, 16);
     apply_window(in + 32, win + 48, win + 640, sumb, sumd, 16);
@@ -179,6 +160,7 @@ static void apply_window_mp3(float *in, float *win, int *unused, float *out,
 }
 
 
+#if HAVE_YASM
 #define DECL_IMDCT_BLOCKS(CPU1, CPU2)                                       \
 static void imdct36_blocks_ ## CPU1(float *out, float *buf, float *in,      \
                                int count, int switch_point, int block_type) \
@@ -211,7 +193,6 @@ static void imdct36_blocks_ ## CPU1(float *out, float *buf, float *in,      \
     }                                                                   \
 }
 
-#if HAVE_YASM
 #if HAVE_SSE
 DECL_IMDCT_BLOCKS(sse,sse)
 DECL_IMDCT_BLOCKS(sse2,sse)
@@ -221,7 +202,7 @@ DECL_IMDCT_BLOCKS(ssse3,sse)
 #if HAVE_AVX
 DECL_IMDCT_BLOCKS(avx,avx)
 #endif
-#endif
+#endif /* HAVE_YASM */
 
 void ff_mpadsp_init_mmx(MPADSPContext *s)
 {

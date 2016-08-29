@@ -36,6 +36,7 @@
 #include <stdio.h>
 
 #include "avcodec.h"
+#include "internal.h"
 #include "get_bits.h"
 #include "dsputil.h"
 #include "fft.h"
@@ -166,7 +167,7 @@ static av_cold int imc_decode_init(AVCodecContext * avctx)
         av_log(avctx, AV_LOG_INFO, "FFT init failed\n");
         return ret;
     }
-    ff_dsputil_init(&q->dsp, avctx);
+    dsputil_init(&q->dsp, avctx);
     avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
     avctx->channel_layout = AV_CH_LAYOUT_MONO;
 
@@ -365,6 +366,10 @@ static int bit_allocation (IMCContext* q, int stream_format_code, int freebits, 
         iacc += q->bandWidthT[i];
         summa += q->bandWidthT[i] * q->flcoeffs4[i];
     }
+
+    if (!iacc)
+        return AVERROR_INVALIDDATA;
+
     q->bandWidthT[BANDS-1] = 0;
     summa = (summa * 0.5 - freebits) / iacc;
 
@@ -676,7 +681,7 @@ static int imc_decode_frame(AVCodecContext * avctx, void *data,
 
     /* get output buffer */
     q->frame.nb_samples = COEFFS;
-    if ((ret = avctx->get_buffer(avctx, &q->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &q->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -846,13 +851,13 @@ static av_cold int imc_decode_close(AVCodecContext * avctx)
 
 
 AVCodec ff_imc_decoder = {
-    .name           = "imc",
-    .type           = AVMEDIA_TYPE_AUDIO,
-    .id             = CODEC_ID_IMC,
+    .name = "imc",
+    .type = AVMEDIA_TYPE_AUDIO,
+    .id = CODEC_ID_IMC,
     .priv_data_size = sizeof(IMCContext),
-    .init           = imc_decode_init,
-    .close          = imc_decode_close,
-    .decode         = imc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("IMC (Intel Music Coder)"),
+    .init = imc_decode_init,
+    .close = imc_decode_close,
+    .decode = imc_decode_frame,
+    .capabilities = CODEC_CAP_DR1,
+    .long_name = NULL_IF_CONFIG_SMALL("IMC (Intel Music Coder)"),
 };

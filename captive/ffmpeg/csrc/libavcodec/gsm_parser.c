@@ -31,7 +31,6 @@
 typedef struct GSMParseContext {
     ParseContext pc;
     int block_size;
-    int duration;
     int remaining;
 } GSMParseContext;
 
@@ -45,14 +44,8 @@ static int gsm_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
 
     if (!s->block_size) {
         switch (avctx->codec_id) {
-        case CODEC_ID_GSM:
-            s->block_size = GSM_BLOCK_SIZE;
-            s->duration   = GSM_FRAME_SIZE;
-            break;
-        case CODEC_ID_GSM_MS:
-            s->block_size = GSM_MS_BLOCK_SIZE;
-            s->duration   = GSM_FRAME_SIZE * 2;
-            break;
+        case CODEC_ID_GSM:    s->block_size = GSM_BLOCK_SIZE;    break;
+        case CODEC_ID_GSM_MS: s->block_size = GSM_MS_BLOCK_SIZE; break;
         default:
             return AVERROR(EINVAL);
         }
@@ -73,9 +66,6 @@ static int gsm_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
         *poutbuf_size = 0;
         return buf_size;
     }
-
-    s1->duration = s->duration;
-
     *poutbuf      = buf;
     *poutbuf_size = buf_size;
     return next;

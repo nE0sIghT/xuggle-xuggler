@@ -47,7 +47,7 @@ static int yop_probe(AVProbeData *probe_packet)
     return 0;
 }
 
-static int yop_read_header(AVFormatContext *s)
+static int yop_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     YopDecContext *yop = s->priv_data;
     AVIOContext *pb  = s->pb;
@@ -59,6 +59,8 @@ static int yop_read_header(AVFormatContext *s)
 
     audio_stream = avformat_new_stream(s, NULL);
     video_stream = avformat_new_stream(s, NULL);
+    if (!audio_stream || !video_stream)
+        return AVERROR(ENOMEM);
 
     // Extra data that will be passed to the decoder
     video_stream->codec->extradata_size = 8;
@@ -213,6 +215,6 @@ AVInputFormat ff_yop_demuxer = {
     .read_packet    = yop_read_packet,
     .read_close     = yop_read_close,
     .read_seek      = yop_read_seek,
-    .extensions     = "yop",
-    .flags          = AVFMT_GENERIC_INDEX,
+    .extensions = "yop",
+    .flags = AVFMT_GENERIC_INDEX,
 };

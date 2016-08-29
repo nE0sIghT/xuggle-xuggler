@@ -20,6 +20,7 @@
  */
 
 #include "avcodec.h"
+#include "internal.h"
 #define BITSTREAM_READER_LE
 #include "get_bits.h"
 #include "ra288.h"
@@ -62,7 +63,7 @@ static av_cold int ra288_decode_init(AVCodecContext *avctx)
 {
     RA288Context *ractx = avctx->priv_data;
     avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
-    ff_dsputil_init(&ractx->dsp, avctx);
+    dsputil_init(&ractx->dsp, avctx);
 
     avcodec_get_frame_defaults(&ractx->frame);
     avctx->coded_frame = &ractx->frame;
@@ -188,7 +189,7 @@ static int ra288_decode_frame(AVCodecContext * avctx, void *data,
 
     /* get output buffer */
     ractx->frame.nb_samples = RA288_BLOCK_SIZE * RA288_BLOCKS_PER_FRAME;
-    if ((ret = avctx->get_buffer(avctx, &ractx->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &ractx->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

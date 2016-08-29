@@ -360,7 +360,7 @@ static void rv40_loop_filter(RV34DecContext *r, int row)
      * in addition to the coded ones because because they lie at the edge of
      * 8x8 block with different enough motion vectors
      */
-    unsigned mvmasks[4];
+    int mvmasks[4];
 
     mb_pos = row * s->mb_stride;
     for(mb_x = 0; mb_x < s->mb_width; mb_x++, mb_pos++){
@@ -376,8 +376,7 @@ static void rv40_loop_filter(RV34DecContext *r, int row)
         int c_v_deblock[2], c_h_deblock[2];
         int clip_left;
         int avail[4];
-        unsigned y_to_deblock;
-        int c_to_deblock[2];
+        int y_to_deblock, c_to_deblock[2];
 
         q = s->current_picture_ptr->f.qscale_table[mb_pos];
         alpha = rv40_alpha_tab[q];
@@ -545,9 +544,11 @@ static void rv40_loop_filter(RV34DecContext *r, int row)
 static av_cold int rv40_decode_init(AVCodecContext *avctx)
 {
     RV34DecContext *r = avctx->priv_data;
+    int ret;
 
     r->rv30 = 0;
-    ff_rv34_decode_init(avctx);
+    if ((ret = ff_rv34_decode_init(avctx)) < 0)
+        return ret;
     if(!aic_top_vlc.bits)
         rv40_init_tables();
     r->parse_slice_header = rv40_parse_slice_header;
@@ -560,18 +561,17 @@ static av_cold int rv40_decode_init(AVCodecContext *avctx)
 }
 
 AVCodec ff_rv40_decoder = {
-    .name                  = "rv40",
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = CODEC_ID_RV40,
-    .priv_data_size        = sizeof(RV34DecContext),
-    .init                  = rv40_decode_init,
-    .close                 = ff_rv34_decode_end,
-    .decode                = ff_rv34_decode_frame,
-    .capabilities          = CODEC_CAP_DR1 | CODEC_CAP_DELAY |
-                             CODEC_CAP_FRAME_THREADS,
-    .flush                 = ff_mpeg_flush,
-    .long_name             = NULL_IF_CONFIG_SMALL("RealVideo 4.0"),
-    .pix_fmts              = ff_pixfmt_list_420,
+    .name           = "rv40",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_RV40,
+    .priv_data_size = sizeof(RV34DecContext),
+    .init           = rv40_decode_init,
+    .close          = ff_rv34_decode_end,
+    .decode         = ff_rv34_decode_frame,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY | CODEC_CAP_FRAME_THREADS,
+    .flush          = ff_mpeg_flush,
+    .long_name      = NULL_IF_CONFIG_SMALL("RealVideo 4.0"),
+    .pix_fmts       = ff_pixfmt_list_420,
     .init_thread_copy      = ONLY_IF_THREADS_ENABLED(ff_rv34_decode_init_thread_copy),
     .update_thread_context = ONLY_IF_THREADS_ENABLED(ff_rv34_decode_update_thread_context),
 };

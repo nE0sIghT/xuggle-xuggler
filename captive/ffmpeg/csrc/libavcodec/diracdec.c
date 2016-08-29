@@ -399,7 +399,7 @@ static av_cold int dirac_decode_init(AVCodecContext *avctx)
         return AVERROR_PATCHWELCOME;
     }
 
-    ff_dsputil_init(&s->dsp, avctx);
+    dsputil_init(&s->dsp, avctx);
     ff_diracdsp_init(&s->diracdsp);
 
     return 0;
@@ -1332,8 +1332,8 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
         motion_y >>= s->chroma_y_shift;
     }
 
-    mx         = motion_x & ~(-1 << s->mv_precision);
-    my         = motion_y & ~(-1 << s->mv_precision);
+    mx         = motion_x & ~(-1U << s->mv_precision);
+    my         = motion_y & ~(-1U << s->mv_precision);
     motion_x >>= s->mv_precision;
     motion_y >>= s->mv_precision;
     /* normalize subpel coordinates to epel */
@@ -1870,7 +1870,7 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     if (!s->current_picture)
-        return buf_size;
+        return 0;
 
     if (s->current_picture->avframe.display_picture_number > s->frame_number) {
         DiracFrame *delayed_frame = remove_frame(s->delay_frames, s->frame_number);

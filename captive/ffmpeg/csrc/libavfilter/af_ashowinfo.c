@@ -25,7 +25,6 @@
 
 #include "libavutil/adler32.h"
 #include "libavutil/audioconvert.h"
-#include "libavutil/timestamp.h"
 #include "avfilter.h"
 
 typedef struct {
@@ -64,11 +63,11 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *samplesref)
                                  samplesref->audio->channel_layout);
 
     av_log(ctx, AV_LOG_INFO,
-           "n:%d pts:%s pts_time:%s pos:%"PRId64" "
+           "n:%d pts:%"PRId64" pts_time:%f pos:%"PRId64" "
            "fmt:%s chlayout:%s nb_samples:%d rate:%d planar:%d "
-           "checksum:%08X plane_checksum[%08X",
+           "checksum:%08X plane_checksum[%08X %08X %08X %08X %08X %08X %08X %08X]\n",
            showinfo->frame,
-           av_ts2str(samplesref->pts), av_ts2timestr(samplesref->pts, &inlink->time_base),
+           samplesref->pts, samplesref->pts * av_q2d(inlink->time_base),
            samplesref->pos,
            av_get_sample_fmt_name(samplesref->format),
            chlayout_str,
@@ -76,13 +75,11 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *samplesref)
            samplesref->audio->sample_rate,
            samplesref->audio->planar,
            checksum,
-           plane_checksum[0]);
-
-    for (plane = 1; samplesref->data[plane] && plane < 8; plane++)
-        av_log(ctx, AV_LOG_INFO, " %08X", plane_checksum[plane]);
-    av_log(ctx, AV_LOG_INFO, "]\n");
+           plane_checksum[0], plane_checksum[1], plane_checksum[2], plane_checksum[3],
+           plane_checksum[4], plane_checksum[5], plane_checksum[6], plane_checksum[7]);
 
     showinfo->frame++;
+
     avfilter_filter_samples(inlink->dst->outputs[0], samplesref);
 }
 

@@ -23,7 +23,6 @@
  * miscellaneous math routines and tables
  */
 
-#include <assert.h>
 #include <stdint.h>
 #include <limits.h>
 #include "mathematics.h"
@@ -77,9 +76,9 @@ int64_t av_gcd(int64_t a, int64_t b){
 
 int64_t av_rescale_rnd(int64_t a, int64_t b, int64_t c, enum AVRounding rnd){
     int64_t r=0;
-    assert(c > 0);
-    assert(b >=0);
-    assert((unsigned)rnd<=5 && rnd!=4);
+
+    if (c <= 0 || b < 0 || rnd == 4 || rnd > 5)
+        return INT64_MIN;
 
     if(a<0 && a != INT64_MIN) return -av_rescale_rnd(-a, b, c, rnd ^ ((rnd>>1)&1));
 
@@ -131,17 +130,10 @@ int64_t av_rescale(int64_t a, int64_t b, int64_t c){
     return av_rescale_rnd(a, b, c, AV_ROUND_NEAR_INF);
 }
 
-int64_t av_rescale_q_rnd(int64_t a, AVRational bq, AVRational cq,
-                         enum AVRounding rnd)
-{
+int64_t av_rescale_q(int64_t a, AVRational bq, AVRational cq){
     int64_t b= bq.num * (int64_t)cq.den;
     int64_t c= cq.num * (int64_t)bq.den;
-    return av_rescale_rnd(a, b, c, rnd);
-}
-
-int64_t av_rescale_q(int64_t a, AVRational bq, AVRational cq)
-{
-    return av_rescale_q_rnd(a, bq, cq, AV_ROUND_NEAR_INF);
+    return av_rescale_rnd(a, b, c, AV_ROUND_NEAR_INF);
 }
 
 int av_compare_ts(int64_t ts_a, AVRational tb_a, int64_t ts_b, AVRational tb_b){

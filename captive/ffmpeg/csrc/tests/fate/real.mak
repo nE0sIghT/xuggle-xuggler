@@ -12,14 +12,11 @@ fate-ra-cook: CMD = pcm -i $(SAMPLES)/real/ra_cook.rm
 fate-ra-cook: CMP = oneoff
 fate-ra-cook: REF = $(SAMPLES)/real/ra_cook.pcm
 
-FATE_REAL += fate-ralf
-fate-ralf: CMD = md5 -i $(SAMPLES)/lossless-audio/luckynight-partial.rmvb -vn -f s16le
-
 FATE_REAL += fate-rv30
 fate-rv30: CMD = framecrc -flags +bitexact -dct fastint -idct simple -i $(SAMPLES)/real/rv30.rm -an
 
 FATE_REAL += fate-real-rv40
-fate-real-rv40: CMD = framecrc -i $(SAMPLES)/real/spygames-2MB.rmvb -t 10 -an
+fate-real-rv40: CMD = framecrc -i $(SAMPLES)/real/spygames-2MB.rmvb -t 10 -an -vsync 0
 
 FATE_SIPR += fate-sipr-5k0
 fate-sipr-5k0: CMD = pcm -i $(SAMPLES)/sipr/sipr_5k0.rm

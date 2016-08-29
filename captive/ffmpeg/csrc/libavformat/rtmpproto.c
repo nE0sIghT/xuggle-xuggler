@@ -138,12 +138,8 @@ static void gen_connect(URLContext *s, RTMPContext *rt, const char *proto,
         ff_amf_write_bool(&p, 0);
         ff_amf_write_field_name(&p, "capabilities");
         ff_amf_write_number(&p, 15.0);
-
-        /* Tell the server we support all the audio codecs except
-         * SUPPORT_SND_INTEL (0x0008) and SUPPORT_SND_UNUSED (0x0010)
-         * which are unused in the RTMP protocol implementation. */
         ff_amf_write_field_name(&p, "audioCodecs");
-        ff_amf_write_number(&p, 4071.0);
+        ff_amf_write_number(&p, 1639.0);
         ff_amf_write_field_name(&p, "videoCodecs");
         ff_amf_write_number(&p, 252.0);
         ff_amf_write_field_name(&p, "videoFunction");
@@ -151,7 +147,7 @@ static void gen_connect(URLContext *s, RTMPContext *rt, const char *proto,
     }
     ff_amf_write_object_end(&p);
 
-    pkt.data_size = p - pkt.data;
+    pkt.size = p - pkt.data;
 
     ff_rtmp_packet_write(rt->stream, &pkt, rt->chunk_size, rt->prev_pkt[1]);
     ff_rtmp_packet_destroy(&pkt);
@@ -342,21 +338,6 @@ static void gen_pong(URLContext *s, RTMPContext *rt, RTMPPacket *ppkt)
     p = pkt.data;
     bytestream_put_be16(&p, 7);
     bytestream_put_be32(&p, AV_RB32(ppkt->data+2));
-    ff_rtmp_packet_write(rt->stream, &pkt, rt->chunk_size, rt->prev_pkt[1]);
-    ff_rtmp_packet_destroy(&pkt);
-}
-
-/**
- * Generate server bandwidth message and send it to the server.
- */
-static void gen_server_bw(URLContext *s, RTMPContext *rt)
-{
-    RTMPPacket pkt;
-    uint8_t *p;
-
-    ff_rtmp_packet_create(&pkt, RTMP_NETWORK_CHANNEL, RTMP_PT_SERVER_BW, 0, 4);
-    p = pkt.data;
-    bytestream_put_be32(&p, 2500000);
     ff_rtmp_packet_write(rt->stream, &pkt, rt->chunk_size, rt->prev_pkt[1]);
     ff_rtmp_packet_destroy(&pkt);
 }
@@ -568,7 +549,7 @@ static int rtmp_handshake(URLContext *s, RTMPContext *rt)
 static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
 {
     int i, t;
-    const uint8_t *data_end = pkt->data + pkt->data_size;
+    const uint8_t *data_end = pkt->data + pkt->size;
 
 #ifdef DEBUG
     ff_rtmp_packet_dump(s, pkt);
@@ -576,9 +557,9 @@ static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
 
     switch (pkt->type) {
     case RTMP_PT_CHUNK_SIZE:
-        if (pkt->data_size != 4) {
+        if (pkt->size != 4) {
             av_log(s, AV_LOG_ERROR,
-                   "Chunk size change packet is not 4 bytes long (%d)\n", pkt->data_size);
+                   "Chunk size change packet is not 4 bytes long (%d)\n", pkt->size);
             return -1;
         }
         if (!rt->is_input)
@@ -596,10 +577,10 @@ static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
             gen_pong(s, rt, pkt);
         break;
     case RTMP_PT_CLIENT_BW:
-        if (pkt->data_size < 4) {
+        if (pkt->size < 4) {
             av_log(s, AV_LOG_ERROR,
                    "Client bandwidth report packet is less than 4 bytes long (%d)\n",
-                   pkt->data_size);
+                   pkt->size);
             return -1;
         }
         av_log(s, AV_LOG_DEBUG, "Client bandwidth = %d\n", AV_RB32(pkt->data));
@@ -607,14 +588,14 @@ static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
         break;
     case RTMP_PT_INVOKE:
         //TODO: check for the messages sent for wrong state?
-        if (!memcmp(pkt->data, "\002\000\006_error", 9)) {
+        if (ff_amf_match_string(pkt->data, pkt->size, "_error")) {
             uint8_t tmpstr[256];
 
             if (!ff_amf_get_field_value(pkt->data + 9, data_end,
                                         "description", tmpstr, sizeof(tmpstr)))
                 av_log(s, AV_LOG_ERROR, "Server error: %s\n",tmpstr);
             return -1;
-        } else if (!memcmp(pkt->data, "\002\000\007_result", 10)) {
+        } else if (ff_amf_match_string(pkt->data, pkt->size, "_result")) {
             switch (rt->state) {
             case STATE_HANDSHAKED:
                 if (!rt->is_input) {
@@ -622,7 +603,6 @@ static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
                     gen_fcpublish_stream(s, rt);
                     rt->state = STATE_RELEASING;
                 } else {
-                    gen_server_bw(s, rt);
                     rt->state = STATE_CONNECTING;
                 }
                 gen_create_stream(s, rt);
@@ -656,7 +636,7 @@ static int rtmp_parse_result(URLContext *s, RTMPContext *rt, RTMPPacket *pkt)
                 rt->state = STATE_READY;
                 break;
             }
-        } else if (!memcmp(pkt->data, "\002\000\010onStatus", 11)) {
+        } else if (ff_amf_match_string(pkt->data, pkt->size, "onStatus")) {
             const uint8_t* ptr = pkt->data + 11;
             uint8_t tmpstr[256];
 
@@ -703,7 +683,7 @@ static int get_packet(URLContext *s, int for_header)
     int ret;
     uint8_t *p;
     const uint8_t *next;
-    uint32_t data_size;
+    uint32_t size;
     uint32_t ts, cts, pts=0;
 
     if (rt->state == STATE_STOPPED)
@@ -739,38 +719,39 @@ static int get_packet(URLContext *s, int for_header)
             ff_rtmp_packet_destroy(&rpkt);
             return 0;
         }
-        if (!rpkt.data_size || !rt->is_input) {
+        if (!rpkt.size || !rt->is_input) {
             ff_rtmp_packet_destroy(&rpkt);
             continue;
         }
         if (rpkt.type == RTMP_PT_VIDEO || rpkt.type == RTMP_PT_AUDIO ||
-           (rpkt.type == RTMP_PT_NOTIFY && !memcmp("\002\000\012onMetaData", rpkt.data, 13))) {
+           (rpkt.type == RTMP_PT_NOTIFY &&
+            ff_amf_match_string(rpkt.data, rpkt.size, "onMetaData"))) {
             ts = rpkt.timestamp;
 
             // generate packet header and put data into buffer for FLV demuxer
             rt->flv_off  = 0;
-            rt->flv_size = rpkt.data_size + 15;
+            rt->flv_size = rpkt.size + 15;
             rt->flv_data = p = av_realloc(rt->flv_data, rt->flv_size);
             bytestream_put_byte(&p, rpkt.type);
-            bytestream_put_be24(&p, rpkt.data_size);
+            bytestream_put_be24(&p, rpkt.size);
             bytestream_put_be24(&p, ts);
             bytestream_put_byte(&p, ts >> 24);
             bytestream_put_be24(&p, 0);
-            bytestream_put_buffer(&p, rpkt.data, rpkt.data_size);
+            bytestream_put_buffer(&p, rpkt.data, rpkt.size);
             bytestream_put_be32(&p, 0);
             ff_rtmp_packet_destroy(&rpkt);
             return 0;
         } else if (rpkt.type == RTMP_PT_METADATA) {
             // we got raw FLV data, make it available for FLV demuxer
             rt->flv_off  = 0;
-            rt->flv_size = rpkt.data_size;
+            rt->flv_size = rpkt.size;
             rt->flv_data = av_realloc(rt->flv_data, rt->flv_size);
             /* rewrite timestamps */
             next = rpkt.data;
             ts = rpkt.timestamp;
-            while (next - rpkt.data < rpkt.data_size - 11) {
+            while (next - rpkt.data < rpkt.size - 11) {
                 next++;
-                data_size = bytestream_get_be24(&next);
+                size = bytestream_get_be24(&next);
                 p=next;
                 cts = bytestream_get_be24(&next);
                 cts |= bytestream_get_byte(&next) << 24;
@@ -780,9 +761,9 @@ static int get_packet(URLContext *s, int for_header)
                 pts = cts;
                 bytestream_put_be24(&p, ts);
                 bytestream_put_byte(&p, ts >> 24);
-                next += data_size + 3 + 4;
+                next += size + 3 + 4;
             }
-            memcpy(rt->flv_data, rpkt.data, rpkt.data_size);
+            memcpy(rt->flv_data, rpkt.data, rpkt.size);
             ff_rtmp_packet_destroy(&rpkt);
             return 0;
         }
@@ -796,7 +777,7 @@ static int rtmp_close(URLContext *h)
 
     if (!rt->is_input) {
         rt->flv_data = NULL;
-        if (rt->out_pkt.data_size)
+        if (rt->out_pkt.size)
             ff_rtmp_packet_destroy(&rt->out_pkt);
         if (rt->state > STATE_FCPUBLISH)
             gen_fcunpublish_stream(h, rt);

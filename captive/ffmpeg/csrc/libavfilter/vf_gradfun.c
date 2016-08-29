@@ -113,6 +113,7 @@ static void filter(GradFunContext *ctx, uint8_t *dst, const uint8_t *src, int wi
         ctx->filter_line(dst + y * dst_linesize, src + y * src_linesize, dc - r / 2, width, thresh, dither[y & 7]);
         if (++y >= height) break;
     }
+    emms_c();
 }
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -120,7 +121,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     GradFunContext *gf = ctx->priv;
     float thresh = 1.2;
     int radius = 16;
-    int cpu_flags = av_get_cpu_flags();
+    av_unused int cpu_flags = av_get_cpu_flags();
 
     if (args)
         sscanf(args, "%f:%d", &thresh, &radius);

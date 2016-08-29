@@ -472,26 +472,26 @@ static void rv34_pred_mv(RV34DecContext *r, int block_type, int subblock_no, int
     int A[2] = {0}, B[2], C[2];
     int i, j;
     int mx, my;
-    int* avail = r->avail_cache + avail_indexes[subblock_no];
+    int avail_index = avail_indexes[subblock_no];
     int c_off = part_sizes_w[block_type];
 
     mv_pos += (subblock_no & 1) + (subblock_no >> 1)*s->b8_stride;
     if(subblock_no == 3)
         c_off = -1;
 
-    if(avail[-1]){
+    if(r->avail_cache[avail_index - 1]){
         A[0] = s->current_picture_ptr->f.motion_val[0][mv_pos-1][0];
         A[1] = s->current_picture_ptr->f.motion_val[0][mv_pos-1][1];
     }
-    if(avail[-4]){
+    if(r->avail_cache[avail_index - 4]){
         B[0] = s->current_picture_ptr->f.motion_val[0][mv_pos-s->b8_stride][0];
         B[1] = s->current_picture_ptr->f.motion_val[0][mv_pos-s->b8_stride][1];
     }else{
         B[0] = A[0];
         B[1] = A[1];
     }
-    if(!avail[c_off-4]){
-        if(avail[-4] && (avail[-1] || r->rv30)){
+    if(!r->avail_cache[avail_index - 4 + c_off]){
+        if(r->avail_cache[avail_index - 4] && (r->avail_cache[avail_index - 1] || r->rv30)){
             C[0] = s->current_picture_ptr->f.motion_val[0][mv_pos-s->b8_stride-1][0];
             C[1] = s->current_picture_ptr->f.motion_val[0][mv_pos-s->b8_stride-1][1];
         }else{
@@ -554,7 +554,7 @@ static void rv34_pred_mv_b(RV34DecContext *r, int block_type, int dir)
     MpegEncContext *s = &r->s;
     int mb_pos = s->mb_x + s->mb_y * s->mb_stride;
     int mv_pos = s->mb_x * 2 + s->mb_y * 2 * s->b8_stride;
-    int A[2] = { 0 }, B[2] = { 0 }, C[2] = { 0 };
+    int A[2], B[2], C[2];
     int has_A = 0, has_B = 0, has_C = 0;
     int mx, my;
     int i, j;
@@ -562,6 +562,9 @@ static void rv34_pred_mv_b(RV34DecContext *r, int block_type, int dir)
     const int mask = dir ? MB_TYPE_L1 : MB_TYPE_L0;
     int type = cur_pic->f.mb_type[mb_pos];
 
+    memset(A, 0, sizeof(A));
+    memset(B, 0, sizeof(B));
+    memset(C, 0, sizeof(C));
     if((r->avail_cache[6-1] & type) & mask){
         A[0] = cur_pic->f.motion_val[dir][mv_pos - 1][0];
         A[1] = cur_pic->f.motion_val[dir][mv_pos - 1][1];
@@ -608,21 +611,21 @@ static void rv34_pred_mv_rv3(RV34DecContext *r, int block_type, int dir)
     int A[2] = {0}, B[2], C[2];
     int i, j, k;
     int mx, my;
-    int* avail = r->avail_cache + avail_indexes[0];
+    int avail_index = avail_indexes[0];
 
-    if(avail[-1]){
+    if(r->avail_cache[avail_index - 1]){
         A[0] = s->current_picture_ptr->f.motion_val[0][mv_pos - 1][0];
         A[1] = s->current_picture_ptr->f.motion_val[0][mv_pos - 1][1];
     }
-    if(avail[-4]){
+    if(r->avail_cache[avail_index - 4]){
         B[0] = s->current_picture_ptr->f.motion_val[0][mv_pos - s->b8_stride][0];
         B[1] = s->current_picture_ptr->f.motion_val[0][mv_pos - s->b8_stride][1];
     }else{
         B[0] = A[0];
         B[1] = A[1];
     }
-    if(!avail[-4 + 2]){
-        if(avail[-4] && (avail[-1])){
+    if(!r->avail_cache[avail_index - 4 + 2]){
+        if(r->avail_cache[avail_index - 4] && (r->avail_cache[avail_index - 1])){
             C[0] = s->current_picture_ptr->f.motion_val[0][mv_pos - s->b8_stride - 1][0];
             C[1] = s->current_picture_ptr->f.motion_val[0][mv_pos - s->b8_stride - 1][1];
         }else{
@@ -1019,9 +1022,24 @@ static void rv34_output_i16x16(RV34DecContext *r, int8_t *intra_types, int cbp)
                     q_ac = rv34_qscale_tab[s->qscale];
     uint8_t        *dst  = s->dest[0];
     DCTELEM        *ptr  = s->block[0];
+    int       avail[6*8] = {0};
     int i, j, itype, has_ac;
 
     memset(block16, 0, 16 * sizeof(*block16));
+
+    // Set neighbour information.
+    if(r->avail_cache[1])
+        avail[0] = 1;
+    if(r->avail_cache[2])
+        avail[1] = avail[2] = 1;
+    if(r->avail_cache[3])
+        avail[3] = avail[4] = 1;
+    if(r->avail_cache[4])
+        avail[5] = 1;
+    if(r->avail_cache[5])
+        avail[8] = avail[16] = 1;
+    if(r->avail_cache[9])
+        avail[24] = avail[32] = 1;
 
     has_ac = rv34_decode_block(block16, gb, r->cur_vlcs, 3, 0, q_dc, q_dc, q_ac);
     if(has_ac)
@@ -1337,7 +1355,7 @@ static int check_slice_end(RV34DecContext *r, MpegEncContext *s)
     if(r->s.mb_skip_run > 1)
         return 0;
     bits = get_bits_left(&s->gb);
-    if(bits <= 0 || (bits < 8 && !show_bits(&s->gb, bits)))
+    if(bits < 0 || (bits < 8 && !show_bits(&s->gb, bits)))
         return 1;
     return 0;
 }
@@ -1477,7 +1495,7 @@ av_cold int ff_rv34_decode_init(AVCodecContext *avctx)
     MpegEncContext *s = &r->s;
     int ret;
 
-    ff_MPV_decode_defaults(s);
+    MPV_decode_defaults(s);
     s->avctx      = avctx;
     s->out_format = FMT_H263;
     s->codec_id   = avctx->codec_id;
@@ -1492,7 +1510,7 @@ av_cold int ff_rv34_decode_init(AVCodecContext *avctx)
     avctx->has_b_frames = 1;
     s->low_delay = 0;
 
-    if ((ret = ff_MPV_common_init(s)) < 0)
+    if ((ret = MPV_common_init(s)) < 0)
         return ret;
 
     ff_h264_pred_init(&r->h, CODEC_ID_RV40, 8, 1);
@@ -1524,7 +1542,7 @@ int ff_rv34_decode_init_thread_copy(AVCodecContext *avctx)
 
     if (avctx->internal->is_copy) {
         r->tmp_b_block_base = NULL;
-        if ((err = ff_MPV_common_init(&r->s)) < 0)
+        if ((err = MPV_common_init(&r->s)) < 0)
             return err;
         if ((err = rv34_decoder_alloc(r)) < 0)
             return err;
@@ -1542,10 +1560,10 @@ int ff_rv34_decode_update_thread_context(AVCodecContext *dst, const AVCodecConte
         return 0;
 
     if (s->height != s1->height || s->width != s1->width) {
-        ff_MPV_common_end(s);
+        MPV_common_end(s);
         s->height = s1->height;
         s->width  = s1->width;
-        if ((err = ff_MPV_common_init(s)) < 0)
+        if ((err = MPV_common_init(s)) < 0)
             return err;
         if ((err = rv34_decoder_realloc(r)) < 0)
             return err;
@@ -1576,8 +1594,7 @@ static int finish_frame(AVCodecContext *avctx, AVFrame *pict)
     int got_picture = 0;
 
     ff_er_frame_end(s);
-    ff_MPV_frame_end(s);
-    s->mb_num_left = 0;
+    MPV_frame_end(s);
 
     if (HAVE_THREADS && (s->avctx->active_thread_type & FF_THREAD_FRAME))
         ff_thread_report_progress(&s->current_picture_ptr->f, INT_MAX, 0);
@@ -1658,7 +1675,7 @@ int ff_rv34_decode_frame(AVCodecContext *avctx,
             av_log(avctx, AV_LOG_ERROR, "New frame but still %d MB left.",
                    s->mb_num_left);
             ff_er_frame_end(s);
-            ff_MPV_frame_end(s);
+            MPV_frame_end(s);
         }
 
         if (s->width != si.width || s->height != si.height) {
@@ -1673,17 +1690,17 @@ int ff_rv34_decode_frame(AVCodecContext *avctx,
 
             av_log(s->avctx, AV_LOG_WARNING, "Changing dimensions to %dx%d\n",
                    si.width, si.height);
-            ff_MPV_common_end(s);
+            MPV_common_end(s);
             s->width  = si.width;
             s->height = si.height;
             avcodec_set_dimensions(s->avctx, s->width, s->height);
-            if ((err = ff_MPV_common_init(s)) < 0)
+            if ((err = MPV_common_init(s)) < 0)
                 return err;
             if ((err = rv34_decoder_realloc(r)) < 0)
                 return err;
         }
         s->pict_type = si.type ? si.type : AV_PICTURE_TYPE_I;
-        if (ff_MPV_frame_start(s, s->avctx) < 0)
+        if (MPV_frame_start(s, s->avctx) < 0)
             return -1;
         ff_er_frame_start(s);
         if (!r->tmp_b_block_base) {
@@ -1775,8 +1792,7 @@ int ff_rv34_decode_frame(AVCodecContext *avctx,
             /* always mark the current frame as finished, frame-mt supports
              * only complete frames */
             ff_er_frame_end(s);
-            ff_MPV_frame_end(s);
-            s->mb_num_left = 0;
+            MPV_frame_end(s);
             ff_thread_report_progress(&s->current_picture_ptr->f, INT_MAX, 0);
             return AVERROR_INVALIDDATA;
         }
@@ -1789,7 +1805,7 @@ av_cold int ff_rv34_decode_end(AVCodecContext *avctx)
 {
     RV34DecContext *r = avctx->priv_data;
 
-    ff_MPV_common_end(&r->s);
+    MPV_common_end(&r->s);
     rv34_decoder_free(r);
 
     return 0;

@@ -45,7 +45,7 @@ static int decode_frame(AVCodecContext *avctx,
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     VideoXLContext * const a = avctx->priv_data;
-    AVFrame * const p = &a->pic;
+    AVFrame * const p= (AVFrame*)&a->pic;
     uint8_t *Y, *U, *V;
     int i, j;
     int stride;
@@ -68,6 +68,11 @@ static int decode_frame(AVCodecContext *avctx,
     V = a->pic.data[2];
 
     stride = avctx->width - 4;
+
+    if (avctx->width % 4) {
+        av_log(avctx, AV_LOG_ERROR, "Width not a multiple of 4.\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     if (buf_size < avctx->width * avctx->height) {
         av_log(avctx, AV_LOG_ERROR, "Packet is too small\n");
@@ -154,5 +159,5 @@ AVCodec ff_xl_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Miro VideoXL"),
+    .long_name = NULL_IF_CONFIG_SMALL("Miro VideoXL"),
 };

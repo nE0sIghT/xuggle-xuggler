@@ -156,9 +156,8 @@ static int yuv4_write_header(AVFormatContext *s)
         return AVERROR(EIO);
 
     if (s->streams[0]->codec->codec_id != CODEC_ID_RAWVIDEO) {
-        av_log(s, AV_LOG_ERROR,
-               "A non-rawvideo stream was selected, but yuv4mpeg only handles rawvideo streams\n");
-        return AVERROR(EINVAL);
+        av_log(s, AV_LOG_ERROR, "ERROR: Only rawvideo supported.\n");
+        return AVERROR_INVALIDDATA;
     }
 
     if (s->streams[0]->codec->pix_fmt == PIX_FMT_YUV411P) {
@@ -195,7 +194,7 @@ AVOutputFormat ff_yuv4mpegpipe_muxer = {
 #define MAX_YUV4_HEADER 80
 #define MAX_FRAME_HEADER 80
 
-static int yuv4_read_header(AVFormatContext *s)
+static int yuv4_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     char header[MAX_YUV4_HEADER + 10];  // Include headroom for
                                         // the longest option
@@ -249,9 +248,6 @@ static int yuv4_read_header(AVFormatContext *s)
             } else if (strncmp("420paldv", tokstart, 8) == 0) {
                 pix_fmt = PIX_FMT_YUV420P;
                 chroma_sample_location = AVCHROMA_LOC_TOPLEFT;
-            } else if (strncmp("420", tokstart, 3) == 0) {
-                pix_fmt = PIX_FMT_YUV420P;
-                chroma_sample_location = AVCHROMA_LOC_CENTER;
             } else if (strncmp("411", tokstart, 3) == 0)
                 pix_fmt = PIX_FMT_YUV411P;
             else if (strncmp("422", tokstart, 3) == 0)
@@ -372,7 +368,7 @@ static int yuv4_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int i;
     char header[MAX_FRAME_HEADER+1];
-    int packet_size, width, height;
+    int packet_size, width, height, ret;
     AVStream *st = s->streams[0];
     struct frame_attributes *s1 = s->priv_data;
 
@@ -383,20 +379,28 @@ static int yuv4_read_packet(AVFormatContext *s, AVPacket *pkt)
             break;
         }
     }
-    if (i == MAX_FRAME_HEADER)
-        return -1;
+    if (s->pb->error)
+        return s->pb->error;
+    else if (s->pb->eof_reached)
+        return AVERROR_EOF;
+    else if (i == MAX_FRAME_HEADER)
+        return AVERROR_INVALIDDATA;
+
     if (strncmp(header, Y4M_FRAME_MAGIC, strlen(Y4M_FRAME_MAGIC)))
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     width  = st->codec->width;
     height = st->codec->height;
 
     packet_size = avpicture_get_size(st->codec->pix_fmt, width, height);
     if (packet_size < 0)
-        return -1;
+        return packet_size;
 
-    if (av_get_packet(s->pb, pkt, packet_size) != packet_size)
-        return AVERROR(EIO);
+    ret = av_get_packet(s->pb, pkt, packet_size);
+    if (ret < 0)
+        return ret;
+    else if (ret != packet_size)
+        return s->pb->eof_reached ? AVERROR_EOF : AVERROR(EIO);
 
     if (st->codec->coded_frame) {
         st->codec->coded_frame->interlaced_frame = s1->interlaced_frame;
@@ -424,6 +428,6 @@ AVInputFormat ff_yuv4mpegpipe_demuxer = {
     .read_probe     = yuv4_probe,
     .read_header    = yuv4_read_header,
     .read_packet    = yuv4_read_packet,
-    .extensions     = "y4m",
+    .extensions     = "y4m"
 };
 #endif

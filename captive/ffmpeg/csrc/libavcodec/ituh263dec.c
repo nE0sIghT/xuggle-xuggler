@@ -240,7 +240,7 @@ int ff_h263_resync(MpegEncContext *s){
     if(show_bits(&s->gb, 16)==0){
         pos= get_bits_count(&s->gb);
         if(CONFIG_MPEG4_DECODER && s->codec_id==CODEC_ID_MPEG4)
-            ret= ff_mpeg4_decode_video_packet_header(s);
+            ret= mpeg4_decode_video_packet_header(s);
         else
             ret= h263_decode_gob_header(s);
         if(ret>=0)
@@ -257,7 +257,7 @@ int ff_h263_resync(MpegEncContext *s){
 
             pos= get_bits_count(&s->gb);
             if(CONFIG_MPEG4_DECODER && s->codec_id==CODEC_ID_MPEG4)
-                ret= ff_mpeg4_decode_video_packet_header(s);
+                ret= mpeg4_decode_video_packet_header(s);
             else
                 ret= h263_decode_gob_header(s);
             if(ret>=0)
@@ -467,7 +467,7 @@ static int h263_decode_block(MpegEncContext * s, DCTELEM * block,
             component = (n <= 3 ? 0 : n - 4 + 1);
             level = s->last_dc[component];
             if (s->rv10_first_dc_coded[component]) {
-                diff = ff_rv_decode_dc(s, n);
+                diff = rv_decode_dc(s, n);
                 if (diff == 0xffff)
                     return -1;
                 level += diff;
@@ -755,6 +755,8 @@ int ff_h263_decode_mb(MpegEncContext *s,
         }
 
         if(IS_DIRECT(mb_type)){
+            if (!s->pp_time)
+                return AVERROR_INVALIDDATA;
             s->mv_dir = MV_DIR_FORWARD | MV_DIR_BACKWARD | MV_DIRECT;
             mb_type |= ff_mpeg4_set_direct_mv(s, 0, 0);
         }else{
@@ -963,6 +965,8 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
             s->h263_aic = get_bits1(&s->gb); /* Advanced Intra Coding (AIC) */
             s->loop_filter= get_bits1(&s->gb);
             s->unrestricted_mv = s->umvplus || s->obmc || s->loop_filter;
+            if(s->avctx->lowres)
+                s->loop_filter = 0;
 
             s->h263_slice_structured= get_bits1(&s->gb);
             if (get_bits1(&s->gb) != 0) {
@@ -1085,20 +1089,6 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
         skip_bits(&s->gb, 2); /* Quantization information for B-pictures */
     }
 
-    if (s->pict_type!=AV_PICTURE_TYPE_B) {
-        s->time= s->picture_number;
-        s->pp_time= s->time - s->last_non_b_time;
-        s->last_non_b_time= s->time;
-    }else{
-        s->time= s->picture_number;
-        s->pb_time= s->pp_time - (s->last_non_b_time - s->time);
-        if(s->pp_time <=s->pb_time || s->pp_time <= s->pp_time - s->pb_time || s->pp_time<=0){
-            s->pp_time = 2;
-            s->pb_time = 1;
-        }
-        ff_mpeg4_init_direct_mv(s);
-    }
-
     /* PEI */
     while (get_bits1(&s->gb) != 0) {
         skip_bits(&s->gb, 8);
@@ -1128,7 +1118,7 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
     }
 
         ff_h263_show_pict_info(s);
-    if (s->pict_type == AV_PICTURE_TYPE_I && s->codec_tag == AV_RL32("ZYGO") && get_bits_left(&s->gb) >= 85 + 13*3*16 + 50){
+    if (s->pict_type == AV_PICTURE_TYPE_I && s->codec_tag == AV_RL32("ZYGO")){
         int i,j;
         for(i=0; i<85; i++) av_log(s->avctx, AV_LOG_DEBUG, "%d", get_bits1(&s->gb));
         av_log(s->avctx, AV_LOG_DEBUG, "\n");

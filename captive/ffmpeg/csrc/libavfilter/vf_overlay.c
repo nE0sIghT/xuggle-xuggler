@@ -25,8 +25,6 @@
  * overlay one video on top of another
  */
 
-/* #define DEBUG */
-
 #include "avfilter.h"
 #include "libavutil/eval.h"
 #include "libavutil/avstring.h"
@@ -34,11 +32,10 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mathematics.h"
-#include "libavutil/timestamp.h"
 #include "internal.h"
 #include "drawutils.h"
 
-static const char *const var_names[] = {
+static const char * const var_names[] = {
     "main_w",    "W", ///< width  of the main    video
     "main_h",    "H", ///< height of the main    video
     "overlay_w", "w", ///< width  of the overlay video
@@ -78,7 +75,7 @@ typedef struct {
     uint8_t overlay_rgba_map[4];
     uint8_t overlay_has_alpha;
 
-    AVFilterBufferRef *overpicref, *overpicref_next;
+    AVFilterBufferRef *overpicref;
 
     int main_pix_step[4];       ///< steps per pixel for each plane of the main output
     int overlay_pix_step[4];    ///< steps per pixel for each plane of the overlay
@@ -149,8 +146,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     if (over->overpicref)
         avfilter_unref_buffer(over->overpicref);
-    if (over->overpicref_next)
-        avfilter_unref_buffer(over->overpicref_next);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -309,30 +304,21 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
     AVFilterBufferRef *outpicref = avfilter_ref_buffer(inpicref, ~0);
     AVFilterContext *ctx = inlink->dst;
     OverlayContext *over = ctx->priv;
-    av_unused AVFilterLink *outlink = ctx->outputs[0];
 
     inlink->dst->outputs[0]->out_buf = outpicref;
     outpicref->pts = av_rescale_q(outpicref->pts, ctx->inputs[MAIN]->time_base,
                                   ctx->outputs[0]->time_base);
 
     if (!over->overpicref || over->overpicref->pts < outpicref->pts) {
-        if (!over->overpicref_next)
-            avfilter_request_frame(ctx->inputs[OVERLAY]);
-
-        if (over->overpicref && over->overpicref_next &&
-            over->overpicref_next->pts <= outpicref->pts) {
-            avfilter_unref_buffer(over->overpicref);
-            over->overpicref = over->overpicref_next;
-            over->overpicref_next = NULL;
-        }
+        AVFilterBufferRef *old = over->overpicref;
+        over->overpicref = NULL;
+        avfilter_request_frame(ctx->inputs[OVERLAY]);
+        if (over->overpicref) {
+            if (old)
+                avfilter_unref_buffer(old);
+        } else
+            over->overpicref = old;
     }
-
-    av_dlog(ctx, "main_pts:%s main_pts_time:%s",
-            av_ts2str(outpicref->pts), av_ts2timestr(outpicref->pts, &outlink->time_base));
-    if (over->overpicref)
-        av_dlog(ctx, " over_pts:%s over_pts_time:%s",
-                av_ts2str(over->overpicref->pts), av_ts2timestr(over->overpicref->pts, &outlink->time_base));
-    av_dlog(ctx, "\n");
 
     avfilter_start_frame(inlink->dst->outputs[0], outpicref);
 }
@@ -342,11 +328,9 @@ static void start_frame_overlay(AVFilterLink *inlink, AVFilterBufferRef *inpicre
     AVFilterContext *ctx = inlink->dst;
     OverlayContext *over = ctx->priv;
 
-    inpicref->pts = av_rescale_q(inpicref->pts, ctx->inputs[OVERLAY]->time_base,
-                                 ctx->outputs[0]->time_base);
-
-    if (!over->overpicref) over->overpicref      = inpicref;
-    else                   over->overpicref_next = inpicref;
+    over->overpicref = inpicref;
+    over->overpicref->pts = av_rescale_q(inpicref->pts, ctx->inputs[OVERLAY]->time_base,
+                                         ctx->outputs[0]->time_base);
 }
 
 // divide by 255 and round to nearest

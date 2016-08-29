@@ -25,8 +25,14 @@
 
 #define _WIN32_WINNT 0x0600
 #define COBJMACROS
-#include <dxva.h>
+
+#include "config.h"
+
 #include "dxva2.h"
+#if HAVE_DXVA_H
+#include <dxva.h>
+#endif
+
 #include "avcodec.h"
 #include "mpegvideo.h"
 
