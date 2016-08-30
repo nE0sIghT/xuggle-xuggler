@@ -1,7 +1,7 @@
 /*****************************************************************************
  * threadpool.c: thread pooling
  *****************************************************************************
- * Copyright (C) 2010-2012 x264 project
+ * Copyright (C) 2010-2016 x264 project
  *
  * Authors: Steven Walters <kemuri9@gmail.com>
  *
@@ -47,7 +47,7 @@ struct x264_threadpool_t
     x264_sync_frame_list_t done;   /* list of jobs that have finished processing */
 };
 
-static void x264_threadpool_thread( x264_threadpool_t *pool )
+static void *x264_threadpool_thread( x264_threadpool_t *pool )
 {
     if( pool->init_func )
         pool->init_func( pool->init_arg );
@@ -69,6 +69,7 @@ static void x264_threadpool_thread( x264_threadpool_t *pool )
         job->ret = (void*)x264_stack_align( job->func, job->arg ); /* execute the function */
         x264_sync_frame_list_push( &pool->done, (void*)job );
     }
+    return NULL;
 }
 
 int x264_threadpool_init( x264_threadpool_t **p_pool, int threads,
@@ -117,28 +118,23 @@ void x264_threadpool_run( x264_threadpool_t *pool, void *(*func)(void *), void *
 
 void *x264_threadpool_wait( x264_threadpool_t *pool, void *arg )
 {
-    x264_threadpool_job_t *job = NULL;
-
     x264_pthread_mutex_lock( &pool->done.mutex );
-    while( !job )
+    while( 1 )
     {
         for( int i = 0; i < pool->done.i_size; i++ )
-        {
-            x264_threadpool_job_t *t = (void*)pool->done.list[i];
-            if( t->arg == arg )
+            if( ((x264_threadpool_job_t*)pool->done.list[i])->arg == arg )
             {
-                job = (void*)x264_frame_shift( pool->done.list+i );
+                x264_threadpool_job_t *job = (void*)x264_frame_shift( pool->done.list+i );
                 pool->done.i_size--;
-            }
-        }
-        if( !job )
-            x264_pthread_cond_wait( &pool->done.cv_fill, &pool->done.mutex );
-    }
-    x264_pthread_mutex_unlock( &pool->done.mutex );
+                x264_pthread_mutex_unlock( &pool->done.mutex );
 
-    void *ret = job->ret;
-    x264_sync_frame_list_push( &pool->uninit, (void*)job );
-    return ret;
+                void *ret = job->ret;
+                x264_sync_frame_list_push( &pool->uninit, (void*)job );
+                return ret;
+            }
+
+        x264_pthread_cond_wait( &pool->done.cv_fill, &pool->done.mutex );
+    }
 }
 
 static void x264_threadpool_list_delete( x264_sync_frame_list_t *slist )

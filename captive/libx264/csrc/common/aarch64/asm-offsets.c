@@ -1,9 +1,9 @@
 /*****************************************************************************
- * display.h: x11 visualization interface
+ * asm-offsets.c: check asm offsets for aarch64
  *****************************************************************************
- * Copyright (C) 2005-2012 x264 project
+ * Copyright (C) 2014-2016 x264 project
  *
- * Authors: Tuukka Toivonen <tuukkat@ee.oulu.fi>
+ * Authors: Janne Grunau <janne-x264@jannau.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,19 +23,20 @@
  * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
-#ifndef X264_DISPLAY_H
-#define X264_DISPLAY_H
+#include "common/common.h"
+#include "asm-offsets.h"
 
-void disp_sync(void);
-void disp_setcolor(unsigned char *name);
-/* Display a region of byte wide memory as a grayscale image.
- * num is the window to use for displaying. */
-void disp_gray(int num, char *data, int width, int height,
-               int stride, const unsigned char *title);
-void disp_gray_zoom(int num, char *data, int width, int height,
-               int stride, const unsigned char *title, int zoom);
-void disp_point(int num, int x1, int y1);
-void disp_line(int num, int x1, int y1, int x2, int y2);
-void disp_rect(int num, int x1, int y1, int x2, int y2);
+#define X264_CHECK_OFFSET(s, m, o) struct check_##s##_##m \
+{ \
+    int m_##m[2 * (offsetof(s, m) == o) - 1]; \
+}
 
-#endif
+X264_CHECK_OFFSET(x264_cabac_t, i_low,               CABAC_I_LOW);
+X264_CHECK_OFFSET(x264_cabac_t, i_range,             CABAC_I_RANGE);
+X264_CHECK_OFFSET(x264_cabac_t, i_queue,             CABAC_I_QUEUE);
+X264_CHECK_OFFSET(x264_cabac_t, i_bytes_outstanding, CABAC_I_BYTES_OUTSTANDING);
+X264_CHECK_OFFSET(x264_cabac_t, p_start,             CABAC_P_START);
+X264_CHECK_OFFSET(x264_cabac_t, p,                   CABAC_P);
+X264_CHECK_OFFSET(x264_cabac_t, p_end,               CABAC_P_END);
+X264_CHECK_OFFSET(x264_cabac_t, f8_bits_encoded,     CABAC_F8_BITS_ENCODED);
+X264_CHECK_OFFSET(x264_cabac_t, state,               CABAC_STATE);

@@ -1,9 +1,9 @@
 /*****************************************************************************
- * visualize.h: visualization
+ * mc.h: msa motion compensation
  *****************************************************************************
- * Copyright (C) 2005-2012 x264 project
+ * Copyright (C) 2015-2016 x264 project
  *
- * Authors: Tuukka Toivonen <tuukkat@ee.oulu.fi>
+ * Authors: Neha Rana <neha.rana@imgtec.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,14 +23,9 @@
  * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
-#ifndef X264_VISUALIZE_H
-#define X264_VISUALIZE_H
+#ifndef X264_MIPS_MC_H
+#define X264_MIPS_MC_H
 
-#include "common/common.h"
-
-int  x264_visualize_init( x264_t *h );
-void x264_visualize_mb( x264_t *h );
-void x264_visualize_show( x264_t *h );
-void x264_visualize_close( x264_t *h );
+void x264_mc_init_mips( int cpu, x264_mc_functions_t *pf );
 
 #endif
