@@ -1293,7 +1293,7 @@
           <exclude name="*.*.*" />
        </fileset>
        <fileset dir="${dist.unix.dir}/stage/${xuggle.os}${xuggle.dir}/bin">
-          <include name="*.dll"/>
+          <include name="libxuggle*.dll"/>
           <exclude name="*.*.*" />
        </fileset>
     </copy>
