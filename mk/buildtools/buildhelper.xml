@@ -1190,6 +1190,7 @@
     <exec executable="${build.native.make}"
         dir="${build-native.dir}"
         failonerror="true">
+      <arg line="-j${build.native.make.jobs}"/>
       <arg line="all"/>
     </exec>
   </target>
