@@ -26,7 +26,7 @@ export PKG_CONFIG_PATH="@abs_top_builddir@/stage@libdir@/pkgconfig"
 
 FFMPEG_OPTIONS="$FFMPEG_OPTIONS --disable-shared"
 FFMPEG_OPTIONS="$FFMPEG_OPTIONS --enable-pic"
-#FFMPEG_OPTIONS="$FFMPEG_OPTIONS --enable-runtime-cpudetect"
+FFMPEG_OPTIONS="$FFMPEG_OPTIONS --enable-runtime-cpudetect --disable-avx"
 
 if test "x$CAPTIVE_ENABLE_FFMPEG_GPL" = "xyes"; then
   FFMPEG_OPTIONS="$FFMPEG_OPTIONS --enable-gpl --enable-nonfree"
