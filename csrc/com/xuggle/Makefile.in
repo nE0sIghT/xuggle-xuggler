@@ -91,6 +91,8 @@ host_triplet = @host@
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmoldname \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lpthread \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lmsvcrt \
+@VS_OS_WINDOWS_TRUE@	-XCClinker -lgdi32 \
+@VS_OS_WINDOWS_TRUE@	-XCClinker -lwsock32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -ladvapi32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -lshell32 \
 @VS_OS_WINDOWS_TRUE@	-XCClinker -luser32 \

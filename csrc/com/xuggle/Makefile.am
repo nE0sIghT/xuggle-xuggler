@@ -50,6 +50,8 @@ libxuggle_la_LDFLAGS+= \
 	-XCClinker -lmoldname \
 	-XCClinker -lpthread \
 	-XCClinker -lmsvcrt \
+	-XCClinker -lgdi32 \
+	-XCClinker -lwsock32 \
 	-XCClinker -ladvapi32 \
 	-XCClinker -lshell32 \
 	-XCClinker -luser32 \
