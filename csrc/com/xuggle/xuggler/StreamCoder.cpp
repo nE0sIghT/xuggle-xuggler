@@ -1597,10 +1597,10 @@ StreamCoder::encodeAudio(IPacket * pOutPacket, IAudioSamples* pSamples,
               || mCodecContext->codec->id == CODEC_ID_VORBIS)
       {
         // FLAC & VORBIS audio for some reason gives an error if your output buffer isn't
-        // over double the frame size, so we fake it here.  This could be further optimized
+        // over triple the frame size, so we fake it here.  This could be further optimized
         // to only require an exact number, but this math is simpler and will always
         // be large enough.
-        bufferSize = (64 + getAudioFrameSize() * (bytesPerSample + 1)) * 2;
+        bufferSize = (64 + getAudioFrameSize() * (bytesPerSample + 1)) * 3;
       }
       VS_ASSERT(bufferSize> 0, "no buffer size in samples");
       retval = packet->allocateNewPayload(bufferSize);
