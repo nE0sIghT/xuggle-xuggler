@@ -1,6 +1,25 @@
 This repository contains fixes to cross-compile Xuggler with newer mingw64.
+All builds are produced on fully updated Oracle Linux 7 system.
+
 Please note that Xuggler was deprecated by upstream.
 Consider using Humble Video instead: https://github.com/artclarke/humble-video
+
+= Known issues =
+
+Cross build with command
+
+    ant -Dbuild.configure.os=x86_64-w64-mingw32 clobber stage
+
+will produce Xuggle binary with dynamically linked libgcc and libstdc++.
+
+To make statically linked binary you should use
+
+    CC="x86_64-w64-mingw32-gcc -static-libgcc -static-libstdc++" \
+    CXX="x86_64-w64-mingw32-g++ -static-libgcc -static-libstdc++" \
+    ant -Dbuild.configure.os=x86_64-w64-mingw32 clobber stage
+
+command for cross-compilation.
+
 
 Welcome to Xuggle-Xuggler-Main (a.k.a. Xuggler)
 http://www.xuggle.com/xuggler
