@@ -40,7 +40,7 @@ for some of the concepts heree.
   <settings defaultResolver="default"/>
 
   <!-- Pulls in the "public" resolver for ibiblio-hosted jars. -->
-  <include url="${ivy.default.ivy.user.dir}/ivysettings-public.xml"/>
+  <include url="${ivy.default.settings.dir}/ivysettings-public.xml"/>
 
   <resolvers>
 
